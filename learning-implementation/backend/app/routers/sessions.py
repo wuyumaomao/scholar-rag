@@ -17,4 +17,15 @@ async def session(session_id: str) -> dict[str, str]:
     result = get_session(session_id)
     if result is None:
         raise HTTPException(status_code=404, detail="会话不存在")
-    return result
+    return {
+        "session_id": result["session_id"],
+        "title": result["title"],
+    }
+
+
+@router.get("/api/sessions/{session_id}/history")
+async def session_history(session_id: str) -> list[dict[str, str]]:
+    result = get_session(session_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return result["messages"]
