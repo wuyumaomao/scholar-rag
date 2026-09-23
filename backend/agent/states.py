@@ -37,6 +37,7 @@ def merge_citations(left: list[dict], right: list[dict]) -> list[dict]:
 class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     query: str
+    paper_id: str | None
     query_type: str
     summary: str
     documents: list[str]
@@ -49,6 +50,7 @@ class AgentState(TypedDict):
 
 class SubAgentState(TypedDict):
     query: str
+    paper_id: str | None
     query_type: str
     documents: list[str]
     answer: str

@@ -5,6 +5,7 @@ for semantically similar queries above a cosine similarity threshold.
 """
 
 import logging
+import threading
 from collections import OrderedDict
 from typing import Optional
 import numpy as np
@@ -42,17 +43,25 @@ class RetrievalCache:
         self.embeddings = embeddings
         self.max_size = max_size
         self.threshold = similarity_threshold
-        # OrderedDict: key -> (embedding np.ndarray, results list)
-        self._store: OrderedDict[str, tuple[np.ndarray, list[Document]]] = OrderedDict()
+        self._lock = threading.RLock()
+        # OrderedDict: (query, scope) -> (embedding, results, scope)
+        # A similar query must not cross a paper or retrieval-filter boundary.
+        self._store: OrderedDict[
+            tuple[str, str], tuple[np.ndarray, list[Document], str]
+        ] = OrderedDict()
 
     def _embed(self, query: str) -> np.ndarray:
         vec = self.embeddings.embed_query(query)
         return np.array(vec, dtype=np.float32)
 
-    def _find_best(self, vec: np.ndarray) -> Optional[tuple[str, float]]:
+    def _find_best(
+        self, vec: np.ndarray, scope: str
+    ) -> Optional[tuple[tuple[str, str], float]]:
         """Return (key, similarity) of the best matching cache entry, or None."""
         best_key, best_sim = None, -1.0
-        for key, (cached_vec, _) in self._store.items():
+        for key, (cached_vec, _, cached_scope) in self._store.items():
+            if cached_scope != scope:
+                continue
             sim = _cosine(vec, cached_vec)
             if sim > best_sim:
                 best_sim, best_key = sim, key
@@ -60,28 +69,31 @@ class RetrievalCache:
             return best_key, best_sim
         return None
 
-    def get(self, query: str) -> Optional[list[Document]]:
+    def get(self, query: str, scope: str = "") -> Optional[list[Document]]:
         """Return cached results if a similar query exists, else None."""
-        if not self._store:
+        with self._lock:
+            if not self._store:
+                return None
+            vec = self._embed(query)
+            match = self._find_best(vec, scope)
+            if match:
+                key, sim = match
+                self._store.move_to_end(key)
+                logger.debug(f"Cache hit (sim={sim:.3f}): {query[:60]}")
+                return self._store[key][1]
             return None
-        vec = self._embed(query)
-        match = self._find_best(vec)
-        if match:
-            key, sim = match
-            self._store.move_to_end(key)
-            logger.debug(f"Cache hit (sim={sim:.3f}): {query[:60]}")
-            return self._store[key][1]
-        return None
 
-    def put(self, query: str, results: list[Document]) -> None:
+    def put(self, query: str, results: list[Document], scope: str = "") -> None:
         """Cache results for query; evict LRU entry if at capacity."""
-        vec = self._embed(query)
-        # use query string as key (unique enough, embedding stored separately)
-        if query in self._store:
-            self._store.move_to_end(query)
-        self._store[query] = (vec, results)
-        if len(self._store) > self.max_size:
-            self._store.popitem(last=False)
+        with self._lock:
+            vec = self._embed(query)
+            key = (query, scope)
+            if key in self._store:
+                self._store.move_to_end(key)
+            self._store[key] = (vec, results, scope)
+            if len(self._store) > self.max_size:
+                self._store.popitem(last=False)
 
     def clear(self) -> None:
-        self._store.clear()
+        with self._lock:
+            self._store.clear()

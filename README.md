@@ -33,7 +33,7 @@ ScholarRAG is an end-to-end academic paper Q&A system. It parses PDFs with full 
 
 **Key highlights:**
 
-- Multi-agent query decomposition with parallel retrieval and self-reflection
+- Multi-agent query decomposition with parallel retrieval and optional self-reflection
 - Hybrid BM25 + dense retrieval with cross-encoder reranking
 - Structured PDF parsing preserving section hierarchy, tables, figures, formulas, and captions
 - Smart OCR fallback: fast text extraction by default, OCR only when needed
@@ -95,7 +95,7 @@ This project is **beginner-friendly** and well-suited for anyone looking to lear
 | **Query Routing** | LLM classifies queries (experimental/method/background/general) and filters retrieval accordingly |
 | **VLM Integration** | Lazy figure analysis: invoked for visual queries or when text answer is insufficient; descriptions cached |
 | **Agent** | LangGraph multi-agent: query classification -> decomposition -> parallel sub-agents -> synthesis |
-| **Reflection** | Sub-agents self-evaluate sufficiency, retry with refined queries or trigger VLM fallback |
+| **Reflection** | Optional: sub-agents self-evaluate sufficiency, retry with refined queries or trigger VLM fallback. Disabled by default (`MAX_RETRIES=0` skips the reflect node entirely, saving one LLM call per sub-query) |
 | **Memory** | Sliding window + LLM summary compression for multi-turn context |
 | **Streaming** | SSE real-time streamed responses |
 | **Citations** | Auto-generated source references (paper, section, page) |
@@ -250,7 +250,7 @@ LLM_MODEL=GPT-4o-mini                  # Model name
 LLM_API_KEY=empty
 LLM_TEMPERATURE=0.1                    # Generation temperature
 LLM_MAX_TOKENS=4096
-MAX_RETRIES=0                          # Reflection retry limit
+MAX_RETRIES=0                          # <=0 skips the reflect node entirely; >=1 enables reflection + retry
 
 # VLM Configuration
 VLM_ENABLED=true                       # Enable VLM for figure analysis
@@ -351,14 +351,21 @@ START → summarize → classify → analyze → [sub_agent × N] → prepare_sy
 - `prepare_synthesis`: Aggregates all sub-agent responses, remaps citation numbers, and constructs the final synthesis prompt.
 
 **Sub-Agent Graph Flow (each sub-query runs independently):**
+
+With reflection enabled (`MAX_RETRIES >= 1`):
 ```
 START → retrieve → generate → reflect → [retry | done]
                                 ↑                |
                           prepare_retry ←--------┘
 ```
 
-- The `reflect` node uses an LLM to judge whether the answer is sufficient (`ReflectionResult`). If insufficient, it generates supplementary queries and retries, up to `MAX_RETRIES` (default 2).
-- The reflection stage also includes a VLM fallback mechanism: when the text answer is insufficient and the retrieved results contain figures/charts, it automatically triggers visual model analysis.
+With `MAX_RETRIES <= 0` (default) the reflect / prepare_retry nodes are not compiled into the graph:
+```
+START → retrieve → generate → END
+```
+
+- The `reflect` node uses an LLM to judge whether the answer is sufficient (`ReflectionResult`). If insufficient, it generates supplementary queries and retries, up to `MAX_RETRIES` rounds. Setting `MAX_RETRIES=0` skips this node entirely to save one structured-output LLM call per sub-query.
+- The reflection stage also includes a VLM fallback mechanism: when the text answer is insufficient and the retrieved results contain figures/charts, it automatically triggers visual model analysis. (Since the fallback lives inside `reflect`, it is likewise disabled when reflection is off.)
 
 LangChain provides the underlying abstractions: `BaseChatModel`, `Document`, `HumanMessage/AIMessage/SystemMessage`, `RecursiveCharacterTextSplitter`, etc. LLM calls are made through `langchain-openai`'s `ChatOpenAI`, compatible with any OpenAI-format API (default configured for Ollama's `qwen3:32b`).
 

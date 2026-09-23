@@ -3,6 +3,7 @@
 import base64
 from pathlib import Path
 from langchain_milvus import Milvus, BM25BuiltInFunction
+from pymilvus import MilvusClient, connections
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.messages import HumanMessage
 from langchain_core.language_models import BaseChatModel
@@ -37,6 +38,25 @@ class RerankerService:
 
 class MilvusStoreFactory:
     """Factory for creating Milvus stores."""
+
+    @staticmethod
+    def _register_orm_connection(milvus_uri: str) -> None:
+        """Bridge MilvusClient's shared connection into PyMilvus ORM APIs.
+
+        langchain-milvus uses MilvusClient for most operations, but still reads
+        existing collection schema through Collection(..., using=alias). Recent
+        PyMilvus versions do not automatically expose the MilvusClient handler
+        through the ORM connection registry, so register the shared handler first.
+        """
+        client = MilvusClient(uri=milvus_uri)
+        alias = client._using
+        if not connections.has_connection(alias):
+            connections._alias_handlers[alias] = client._handler
+            connections._alias_config[alias] = {
+                "address": client._config.address,
+                "uri": milvus_uri,
+                "user": "",
+            }
     
     @staticmethod
     def create_store(
@@ -45,17 +65,20 @@ class MilvusStoreFactory:
         collection_name: str,
         is_child: bool = True,
     ) -> Milvus:
-        """Create Milvus store with hybrid search."""
+        """Create Milvus store with dense + BM25 hybrid search."""
+        MilvusStoreFactory._register_orm_connection(milvus_uri)
+
         bm25 = BM25BuiltInFunction(input_field_names="text", output_field_names="sparse")
         suffix = "children" if is_child else "parents"
         
-        return Milvus(
+        store = Milvus(
             embeddings,
             builtin_function=bm25,
             vector_field=["dense", "sparse"],
             collection_name=f"{collection_name}_{suffix}",
             connection_args={"uri": milvus_uri},
         )
+        return store
 
 
 class VisionService:

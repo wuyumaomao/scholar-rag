@@ -188,6 +188,7 @@ async def retrieve(state: SubAgentState, retriever, citation_extractor) -> dict:
     import asyncio
 
     query = state["query"]
+    paper_id = state.get("paper_id")
     retry_queries = state.get("retry_queries", [])
     query_type = state.get("query_type", "general")
 
@@ -203,9 +204,13 @@ async def retrieve(state: SubAgentState, retriever, citation_extractor) -> dict:
     section_type_filter = _ROUTE_CONFIG.get(query_type)
 
     def _invoke(q: str) -> list[Document]:
-        docs = retriever.invoke(q, section_type_filter=section_type_filter)
+        docs = retriever.invoke(
+            q,
+            section_type_filter=section_type_filter,
+            paper_id=paper_id,
+        )
         if not docs and section_type_filter:
-            docs = retriever.invoke(q, section_type_filter=None)
+            docs = retriever.invoke(q, section_type_filter=None, paper_id=paper_id)
         return docs
 
     # Concurrent retrieval for multiple queries

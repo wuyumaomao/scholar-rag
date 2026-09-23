@@ -97,6 +97,8 @@ class PDFParser:
         if use_ocr not in self._converter_cache:
             pipeline_options = PdfPipelineOptions()
             pipeline_options.do_ocr = use_ocr
+            # torch.compile can fail on Windows when PyTorch reads UTF-8 templates as GBK.
+            pipeline_options.layout_options.engine_options.compile_model = False
             self._converter_cache[use_ocr] = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)

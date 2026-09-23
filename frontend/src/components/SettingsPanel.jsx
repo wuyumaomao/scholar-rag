@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Trash2, FileText, Database, Loader2 } from 'lucide-react';
 import { fetchFiles, deleteFile, clearCollection } from '../api';
 
-export default function SettingsPanel({ onCollectionCleared }) {
+export default function SettingsPanel({ onFilesChanged }) {
   const [files, setFiles] = useState([]);
   const [clearing, setClearing] = useState(false);
 
@@ -12,6 +12,7 @@ export default function SettingsPanel({ onCollectionCleared }) {
   const handleDeleteFile = async (fileId) => {
     await deleteFile(fileId);
     load();
+    if (onFilesChanged) onFilesChanged();
   };
 
   const handleClear = async () => {
@@ -20,7 +21,7 @@ export default function SettingsPanel({ onCollectionCleared }) {
     try {
       await clearCollection();
       setFiles([]);
-      if (onCollectionCleared) onCollectionCleared();
+      if (onFilesChanged) onFilesChanged();
     } catch {}
     setClearing(false);
   };

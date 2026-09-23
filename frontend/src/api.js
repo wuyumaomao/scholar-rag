@@ -42,13 +42,13 @@ export async function healthCheck() {
   return res.json();
 }
 
-export function streamChat(query, sessionId, onEvent) {
+export function streamChat(query, sessionId, paperId, onEvent) {
   const ctrl = new AbortController();
 
   fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, session_id: sessionId }),
+    body: JSON.stringify({ query, session_id: sessionId, paper_id: paperId || null }),
     signal: ctrl.signal,
   }).then(async (res) => {
     const reader = res.body.getReader();

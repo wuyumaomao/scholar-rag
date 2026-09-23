@@ -27,6 +27,7 @@ class Config:
     LLM_API_KEY = os.getenv("LLM_API_KEY", "ollama")
     LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
+    # <=0 skips the reflect node entirely; >=1 enables reflection + retry
     MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 
     VLM_ENABLED = os.getenv("VLM_ENABLED", "false").lower() == "true"

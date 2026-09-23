@@ -53,6 +53,7 @@ class Retriever:
         fetch_k: int = 20,
         node_type_filter: Optional[list[str]] = None,
         section_type_filter: Optional[list[str]] = None,
+        paper_id: Optional[str] = None,
     ) -> list[Document]:
         """Full retrieval pipeline.
 
@@ -66,6 +67,7 @@ class Retriever:
             fetch_k: Number of candidates to fetch before reranking.
             node_type_filter: Restrict search to specific node types (e.g. ['table','figure']).
             section_type_filter: Restrict search to specific section types (e.g. ['method','experiment']).
+            paper_id: Restrict search to chunks belonging to one indexed paper.
         """
         # Invalidate col cache in case collection was dropped
         self._child_store._col_cache = None
@@ -77,14 +79,15 @@ class Retriever:
             logger.warning("Collection not found, no documents indexed yet.")
             return []
 
+        cache_scope = repr((paper_id, tuple(node_type_filter or []), tuple(section_type_filter or [])))
         if self.cache:
-            cached = self.cache.get(query)
+            cached = self.cache.get(query, scope=cache_scope)
             if cached is not None:
                 logger.debug(f"Cache hit for query: {query[:50]}...")
                 return cached
 
         search_query = self._hyde(query) if use_hyde and self.llm else query
-        expr = self._build_expr(node_type_filter, section_type_filter)
+        expr = self._build_expr(node_type_filter, section_type_filter, paper_id)
 
         if rerank and self.reranker:
             children = self._hybrid_search(self._child_store, search_query, fetch_k * RERANK_FETCH_MULTIPLIER, rrf_k, expr)
@@ -114,7 +117,7 @@ class Retriever:
         final = deduped[:k]
         
         if self.cache:
-            self.cache.put(query, final)
+            self.cache.put(query, final, scope=cache_scope)
         
         logger.info(f"Retrieved {len(final)} results for query: {query[:50]}...")
         return final
@@ -124,9 +127,17 @@ class Retriever:
         from .incremental import IncrementalUpdater
         return IncrementalUpdater(self._parent_store, self._child_store)
 
-    def _build_expr(self, node_type_filter: Optional[list[str]], section_type_filter: Optional[list[str]]) -> Optional[str]:
+    def _build_expr(
+        self,
+        node_type_filter: Optional[list[str]],
+        section_type_filter: Optional[list[str]],
+        paper_id: Optional[str] = None,
+    ) -> Optional[str]:
         """Build Milvus filter expression from routing constraints."""
         parts = []
+        if paper_id:
+            escaped_paper_id = paper_id.replace("\\", "\\\\").replace('"', '\\"')
+            parts.append(f'paper_id == "{escaped_paper_id}"')
         if node_type_filter:
             types = " || ".join(f'node_type == "{t}"' for t in node_type_filter)
             parts.append(f"({types})")
@@ -147,8 +158,28 @@ class Retriever:
         kwargs = {"k": k, "reranker": reranker, "fetch_k": k}
         if expr:
             kwargs["expr"] = expr
-        results = store.similarity_search(query, **kwargs)
-        return results
+        try:
+            results = store.similarity_search(query, **kwargs)
+            return results
+        except Exception as e:
+            message = str(e)
+            if "nq [0] is invalid" not in message:
+                raise
+            logger.warning("Hybrid search produced an empty sparse query; falling back to dense search.")
+            return self._dense_search(store, query, k, expr)
+
+    def _dense_search(self, store: Milvus, query: str, k: int, expr: Optional[str] = None) -> list[Document]:
+        MilvusStoreFactory._register_orm_connection(self.milvus_uri)
+        dense_store = Milvus(
+            self.embeddings,
+            vector_field="dense",
+            collection_name=store.collection_name,
+            connection_args={"uri": self.milvus_uri},
+        )
+        kwargs = {"k": k}
+        if expr:
+            kwargs["expr"] = expr
+        return dense_store.similarity_search(query, **kwargs)
 
     def _rerank(self, query: str, docs: list[Document], top_k: int) -> list[Document]:
         if not docs:

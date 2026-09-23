@@ -5,10 +5,12 @@ import ChatMessages from './components/ChatMessages';
 import ChatInput from './components/ChatInput';
 import FileUpload from './components/FileUpload';
 import SettingsPanel from './components/SettingsPanel';
-import { fetchSessions, fetchHistory, deleteSession, streamChat } from './api';
+import { fetchSessions, fetchHistory, deleteSession, fetchFiles, streamChat } from './api';
 
 export default function App() {
   const [sessions, setSessions] = useState([]);
+  const [files, setFiles] = useState([]);
+  const [paperId, setPaperId] = useState('');
   const [currentId, setCurrentId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -20,7 +22,18 @@ export default function App() {
     fetchSessions().then(setSessions).catch(() => {});
   }, []);
 
+  const loadFiles = useCallback(() => {
+    fetchFiles().then((items) => {
+      setFiles(items);
+      setPaperId((current) => {
+        if (current && !items.some((file) => file.paper_id === current)) return '';
+        return current || (items.length === 1 ? items[0].paper_id : '');
+      });
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => { loadSessions(); }, [loadSessions]);
+  useEffect(() => { loadFiles(); }, [loadFiles]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -63,7 +76,7 @@ export default function App() {
     let answer = '';
     let citations = [];
 
-    const cancel = streamChat(query, sessionId, (evt) => {
+    const cancel = streamChat(query, sessionId, paperId, (evt) => {
       switch (evt.type) {
         case 'session_id':
           sessionId = evt.data;
@@ -107,6 +120,10 @@ export default function App() {
   };
 
   const togglePanel = (name) => setPanel((prev) => (prev === name ? null : name));
+  const handleFilesChanged = () => {
+    loadFiles();
+    loadSessions();
+  };
 
   return (
     <div className="flex h-screen bg-white">
@@ -121,7 +138,20 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 bg-white">
           <h1 className="text-sm font-medium text-gray-700">Scholar RAG</h1>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <label htmlFor="paper-scope" className="sr-only">Search scope</label>
+            <select
+              id="paper-scope"
+              value={paperId}
+              onChange={(e) => setPaperId(e.target.value)}
+              className="max-w-44 rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 outline-none focus:border-gray-400"
+              title="Limit answers to one uploaded paper"
+            >
+              <option value="">All papers</option>
+              {files.map((file) => (
+                <option key={file.file_id} value={file.paper_id}>{file.filename}</option>
+              ))}
+            </select>
             <button
               onClick={() => togglePanel('upload')}
               className={`p-2 rounded-lg transition-colors ${panel === 'upload' ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
@@ -154,8 +184,8 @@ export default function App() {
                   <ChevronLeft size={14} className="text-gray-400" />
                 </button>
               </div>
-              {panel === 'upload' && <FileUpload onUploaded={loadSessions} />}
-              {panel === 'settings' && <SettingsPanel onCollectionCleared={loadSessions} />}
+              {panel === 'upload' && <FileUpload onUploaded={handleFilesChanged} />}
+              {panel === 'settings' && <SettingsPanel onFilesChanged={handleFilesChanged} />}
             </div>
           )}
         </div>

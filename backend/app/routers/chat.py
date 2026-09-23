@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api", tags=["chat"])
 class ChatRequest(BaseModel):
     query: str
     session_id: str | None = None
+    paper_id: str | None = None
 
 
 def _build_graph():
@@ -35,9 +36,11 @@ def _build_graph():
     )
 
 
-async def _stream_response(graph, query: str, session_id: str) -> AsyncGenerator[str, None]:
+async def _stream_response(
+    graph, query: str, session_id: str, paper_id: str | None = None
+) -> AsyncGenerator[str, None]:
     config = {"configurable": {"thread_id": session_id}}
-    graph_input = {"query": query}
+    graph_input = {"query": query, "paper_id": paper_id}
 
     yield json.dumps({"type": "session_id", "data": session_id})
     yield json.dumps({"type": "status", "data": "analyzing"})
@@ -105,6 +108,6 @@ async def chat(req: ChatRequest):
     graph = _build_graph()
 
     return EventSourceResponse(
-        _stream_response(graph, req.query, session_id),
+        _stream_response(graph, req.query, session_id, req.paper_id),
         media_type="text/event-stream",
     )

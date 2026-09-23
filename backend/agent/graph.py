@@ -55,17 +55,26 @@ def _build_sub_agent_graph(
 
     sg.add_node("retrieve", retrieve_node)
     sg.add_node("generate", generate_node)
-    sg.add_node("reflect", reflect_node)
-    sg.add_node("prepare_retry", prepare_retry)
 
     sg.add_edge(START, "retrieve")
     sg.add_edge("retrieve", "generate")
-    sg.add_edge("generate", "reflect")
-    sg.add_conditional_edges("reflect", retry_router, {
-        "retry": "prepare_retry",
-        "done": END,
-    })
-    sg.add_edge("prepare_retry", "retrieve")
+
+    # Reflection is opt-in: with max_retries <= 0 the reflect / prepare_retry
+    # nodes are not compiled into the sub-graph at all, so each sub-query
+    # saves one structured-output LLM call. Note the VLM fallback lives
+    # inside reflect(), so it is disabled together with reflection.
+    if max_retries > 0:
+        sg.add_node("reflect", reflect_node)
+        sg.add_node("prepare_retry", prepare_retry)
+
+        sg.add_edge("generate", "reflect")
+        sg.add_conditional_edges("reflect", retry_router, {
+            "retry": "prepare_retry",
+            "done": END,
+        })
+        sg.add_edge("prepare_retry", "retrieve")
+    else:
+        sg.add_edge("generate", END)
 
     return sg
 
@@ -79,12 +88,17 @@ def build_graph(
     vision_service=None,
 ):
     def dispatch(state: AgentState):
-        return [Send("sub_agent", {"query": q, "query_type": state.get("query_type", "general")}) for q in state["sub_queries"]]
+        return [Send("sub_agent", {
+            "query": q,
+            "query_type": state.get("query_type", "general"),
+            "paper_id": state.get("paper_id"),
+        }) for q in state["sub_queries"]]
 
     async def sub_agent_node(state: dict) -> dict:
         sub_graph = _build_sub_agent_graph(llm, retriever, citation_extractor, max_retries, vision_service).compile()
         sub_input = {
             "query": state["query"],
+            "paper_id": state.get("paper_id"),
             "query_type": state.get("query_type", "general"),
             "documents": [],
             "answer": "",

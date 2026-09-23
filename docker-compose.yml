@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
 
   milvus:
-    image: milvusdb/milvus:v2.4.0
+    image: milvusdb/milvus:v2.5.0
     command: ["milvus", "run", "standalone"]
     environment:
       ETCD_USE_EMBED: "true"
