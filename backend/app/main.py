@@ -7,9 +7,11 @@ import uvicorn
 from fastapi import FastAPI
 
 from app.routers.chat import router as chat_router
+from app.routers.sessions import router as sessions_router
 
 app = FastAPI(title="Learning RAG Backend")
 app.include_router(chat_router)
+app.include_router(sessions_router)
 
 
 @app.get("/api/health")
