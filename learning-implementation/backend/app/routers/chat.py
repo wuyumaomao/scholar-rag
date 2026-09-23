@@ -20,9 +20,9 @@ async def chat(request: ChatRequest) -> dict[str, str]:
     """返回固定回答，并创建或复用会话。"""
 
     if request.session_id is None:
-        session = create_session()
+        session = create_session(title=request.query[:50])
     else:
-        session = get_session(request.session_id)
+        session = get_session(request.session_id, update_timestamp=True)
         if session is None:
             raise HTTPException(status_code=404, detail="会话不存在")
 
