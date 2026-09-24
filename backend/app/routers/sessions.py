@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from app.store import delete_session, get_session, list_sessions
+from app.store import delete_session, get_session, list_messages, list_sessions
 
 router = APIRouter()
 
@@ -30,7 +30,7 @@ async def session_history(session_id: str) -> list[dict[str, str]]:
     result = get_session(session_id)
     if result is None:
         raise HTTPException(status_code=404, detail="会话不存在")
-    return result["messages"]
+    return list_messages(session_id)
 
 
 @router.delete("/api/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

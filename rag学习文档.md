@@ -252,4 +252,160 @@ Vite         开发阶段的前端服务器，支持热更新和 API 代理
 Nginx        部署阶段提供前端静态文件并代理 API 的 Web 服务器
 ```
 
+## 8. 数据库与 PostgreSQL 持久化
+
+### 8.1 为什么从内存迁移到数据库
+
+最初的学习版使用 Python 字典保存会话：
+
+```python
+sessions = {}
+```
+
+它适合先理解路由和数据流，但后端进程重启后，字典会清空，聊天历史也随之丢失。PostgreSQL 把数据保存在独立数据库服务中，因此后端重启后仍可以查询已有会话和消息。
+
+```text
+内存字典：后端进程退出 -> 数据丢失
+PostgreSQL：后端进程退出 -> 数据仍保存在数据库 volume 中
+```
+
+### 8.2 学习版 PostgreSQL 容器
+
+学习版在 `learning-implementation/docker-compose.yml` 中单独定义 PostgreSQL 服务，不与原项目数据库混用：
+
+```text
+镜像：postgres:16-alpine
+数据库：learning_rag
+容器端口：5432
+宿主机端口：55432
+数据卷：learning_postgres_data
+```
+
+本机运行的 Uvicorn 后端使用这个连接地址：
+
+```text
+postgresql://postgres:postgres@localhost:55432/learning_rag
+```
+
+连接地址格式为：
+
+```text
+postgresql://用户名:密码@主机:端口/数据库名
+```
+
+常用命令：
+
+```cmd
+cd G:\scholar-rag\learning-implementation
+docker compose up -d
+docker compose ps
+docker compose exec postgres psql -U postgres -d learning_rag
+docker compose down
+```
+
+`55432:5432` 的含义是“宿主机 55432 端口映射到容器内部 PostgreSQL 的 5432 端口”。本机进程通过 `localhost:55432` 访问容器；同一 Compose 网络中的其他容器则应使用 `postgres:5432`。
+
+### 8.3 表与关系
+
+学习版有两张业务表：
+
+```text
+sessions（一条会话）
+    1
+    └── 多条 messages（一条条用户问题和助手回答）
+```
+
+`sessions` 保存会话元数据：
+
+```text
+session_id、title、created_at、updated_at
+```
+
+`messages` 保存对话内容：
+
+```text
+message_id、session_id、role、content、created_at
+```
+
+`messages.session_id REFERENCES sessions(session_id)` 定义外键：消息必须关联一个已经存在的会话。被引用的 `sessions.session_id` 是主键，因此能唯一定位父记录。
+
+```sql
+session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE
+```
+
+`ON DELETE CASCADE` 表示删除一条会话时，数据库自动删除它所属的所有消息，避免留下没有父会话的“孤儿消息”。
+
+`role TEXT NOT NULL CHECK (role IN ('user', 'assistant'))` 是检查约束，限制角色只能是用户或助手。
+
+### 8.4 索引
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_messages_session_id
+ON messages(session_id);
+```
+
+这会建立数据库内部索引，不会改变 SQL 查询写法。查询仍然写成：
+
+```sql
+SELECT role, content
+FROM messages
+WHERE session_id = '某个会话 ID';
+```
+
+数据库会自行判断是否使用 `idx_messages_session_id`，以更快定位该会话的消息。索引也可能帮助 `JOIN`、`UPDATE`、`DELETE` 等按 `session_id` 查找的操作；代价是占用额外空间，并且写入数据时需要维护索引，因此应优先为常用于 `WHERE`、`JOIN` 或 `ORDER BY` 的字段建立。
+
+### 8.5 Python 如何连接并执行 SQL
+
+Python 使用 `psycopg[binary]` 驱动连接 PostgreSQL。`backend/app/database.py` 只负责提供连接：
+
+```python
+def get_connection() -> Connection:
+    return psycopg.connect(DATABASE_URL)
+```
+
+`backend/app/store.py` 负责数据访问；router 不直接写 SQL。这种分层是：
+
+```text
+chat.py / sessions.py（HTTP 路由）
+        -> store.py（会话与消息读写）
+        -> database.py（创建 PostgreSQL 连接）
+        -> PostgreSQL（sessions、messages 表）
+```
+
+参数化 SQL 示例：
+
+```python
+cur.execute(
+    """
+    INSERT INTO sessions (session_id, title, created_at, updated_at)
+    VALUES (%s, %s, to_timestamp(%s), to_timestamp(%s))
+    """,
+    (session_id, title, now, now),
+)
+```
+
+第一个参数是 SQL 模板，第二个参数元组依次填入四个 `%s`。`psycopg` 会安全传递参数；不要用 f-string 把用户数据直接拼入 SQL。`to_timestamp()` 把 Python 的 `time.time()` Unix 秒数转换为 PostgreSQL 的 `TIMESTAMPTZ` 时间。
+
+当前存储层的 SQL 映射：
+
+```text
+create_session()  -> INSERT INTO sessions
+list_sessions()   -> SELECT ... FROM sessions ORDER BY updated_at DESC
+get_session()     -> SELECT ... FROM sessions WHERE session_id = %s
+touch_session()   -> UPDATE sessions SET updated_at = NOW()
+delete_session()  -> DELETE FROM sessions
+add_message()     -> INSERT INTO messages
+list_messages()   -> SELECT ... FROM messages WHERE session_id = %s
+```
+
+上下文管理器写法：
+
+```python
+with get_connection() as conn:
+    with conn.cursor() as cur:
+        cur.execute(...)
+```
+
+表示完成后会关闭游标和连接；正常结束时，连接上下文会提交事务，异常时会回滚。
+
 以后新增知识点时，优先补充到最具体的章节；如果是新的主题，再增加一个二级标题，并附上对应源码文件或验证命令。
