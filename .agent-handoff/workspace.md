@@ -10,6 +10,9 @@
 - `doc/`: 项目文档与图片（`project-overview.md`、`project-review-2026-09-17.md`、`learning-progress-2026-08-17.md`、`learning/`、`architecture.png`、`scholsr_rag.png`）。
 - `docs/`: 另有 `docs/superpowers/`。
 - `learning-implementation/`: 学习实现目录。
+- `learning-implementation/docker-compose.yml`: 学习版 PostgreSQL Compose；使用 `localhost:55432` 连接 `learning_rag`。
+- `learning-implementation/backend/app/`: 学习版 FastAPI 入口、路由、数据库连接和 SQL 存储层。
+- `learning-implementation/db/init.sql`: 学习版数据库表初始化 SQL。
 - `data/`、`resource/`、`tmp/`: 数据与临时文件（`data/` 已被 `.gitignore` 忽略）。
 - `Makefile`: 统一命令入口。`docker-compose.yml`: 容器编排。
 
@@ -44,6 +47,7 @@
 - 后端技术栈（`backend/requirements.txt`）：FastAPI + Uvicorn + SSE（`sse-starlette`）；LangChain / LangGraph（`langgraph-checkpoint-postgres`）；向量库 `pymilvus`（经 `langchain-milvus`）；嵌入 `sentence-transformers` / `langchain-huggingface`；PDF 解析 `docling`。
 - 前端技术栈（`frontend/package.json`）：React 18 + Vite + Tailwind；`react-markdown`、`lucide-react`。
 - 状态存储：Postgres 用于 checkpointer 与 session store；Milvus 用于向量检索。
+- 学习版当前只使用 PostgreSQL 保存 `sessions` 和 `messages`；每次数据库操作通过 `psycopg` 建立连接，属于教学阶段实现。
 - 评估：检索指标 Recall@k / Precision@k / MRR / MAP；生成指标使用 RAGAS。
 
 ## Project Conventions
@@ -53,3 +57,5 @@
 - 配置与密钥放 `backend/.env`（模板 `backend/.env.example`）；`.env` 已被 `.gitignore` 忽略。
 - `.gitignore` 已忽略：Python 构建产物、`data/`、`*.pdf`、`*.db`、`*.csv`、`node_modules/`、`frontend/dist/`、`.vscode/`。
 - 前端代码风格由 `frontend/eslint.config.js` 约束（`npm run lint`）。
+- 学习版后端启动：从 `learning-implementation/backend` 执行 `uv run uvicorn app.main:app --host 127.0.0.1 --port 8100`。
+- 学习版数据库启动：从 `learning-implementation` 执行 `docker compose up -d`；查看状态用 `docker compose ps`。

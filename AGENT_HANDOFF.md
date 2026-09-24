@@ -46,8 +46,8 @@
 
 ## Project Rule Targets
 
-- Codex project rules: `AGENTS.md`
-- Claude Code project rules: `.claude/CLAUDE.md`
+- Codex project rules: `AGENTS.md`（已生成）
+- Claude Code project rules: `.claude/CLAUDE.md`（**未生成** —— 初始化时仅使用 `--platform codex`；需要时用 `--platform both` 补生成）
 
 ## Closeout Rule
 

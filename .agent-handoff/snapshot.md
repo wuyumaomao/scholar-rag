@@ -3,22 +3,32 @@
 ## Current State
 
 - Last updated: 2026-09-24
-- Last agent: DSH (dsh web)
 - Workspace root: `G:\scholar-rag`
-- Current objective: 引入仓库级 handoff 接力机制。机制初始化已完成，等待用户指派下一个实际开发任务。
-- Current status: initialized —— 骨架已建立，`workspace.md` 已按仓库事实填写，`UNKNOWN` 已清空
+- Active branch: `codex/learning-from-zero`
+- Current objective: 以代码实践从零重建 ScholarRAG；当前学习实现已从内存会话迁移到 PostgreSQL。
+- Current status: ready —— FastAPI 健康检查、聊天、会话 CRUD、消息历史和 PostgreSQL 持久化已完成并验证。
 - Immediate next actions:
-  - 用户确认 handoff 文件是否纳入 git（当前为未跟踪状态，见 Open questions）
-  - 收到下一个任务后：开工前按 `AGENT_HANDOFF.md` 的 Recovery Reading Order 读 handoff 文件，收尾前更新
+  - 继续 `doc/learning/03-pdf-ingestion.md`，先在学习版实现最小 PDF 上传与元数据记录。
+  - 保持学习版代码在 `learning-implementation/`，原项目 `backend/`、`frontend/` 只作参考。
+  - 新会话开始时按 `AGENT_HANDOFF.md` 的 Recovery Reading Order 恢复上下文，并先阅读相关学习版源码。
 - Active files:
-  - `AGENTS.md`（本次新建，仅含接力协议块）
-  - `AGENT_HANDOFF.md`
-  - `AGENT_SESSION_PROMPTS.md`
-  - `.agent-handoff/snapshot.md`、`.agent-handoff/workspace.md`、`.agent-handoff/risks.md`
+  - `learning-implementation/docker-compose.yml`：学习版 PostgreSQL，宿主机端口 `55432`。
+  - `learning-implementation/db/init.sql`：`sessions`、`messages` 表、外键和索引。
+  - `learning-implementation/backend/app/database.py`：`psycopg` 连接。
+  - `learning-implementation/backend/app/store.py`：PostgreSQL 会话和消息 CRUD。
+  - `learning-implementation/backend/app/routers/chat.py`、`sessions.py`：HTTP 路由。
+  - `learning-implementation/rag学习文档.md`：持续维护的学习笔记。
 - Blockers: none
 - Open questions:
-  - `.agent-handoff/` 与 `AGENT_HANDOFF.md` 是提交进 git（团队/多机共享），还是保持本地未跟踪（仅本机）？
-  - 下一个实际开发任务的优先级尚未确定。
+  - PDF 学习阶段使用哪一个最小解析库，需在开始第 03 章时根据现有依赖和学习目标确定。
+  - 远程分支推送状态需在网络可用时确认；本地学习提交已存在。
+
+## Version Control
+
+- 最近学习实现提交：`f6628c9 feat: persist learning sessions in postgres`。
+- 当前分支 `codex/learning-from-zero`；本地学习提交比 `origin` 超前，之前推送曾因 GitHub 网络不可达失败。
+- handoff 文件本次有更新，提交前应检查并单独提交或与当前学习任务一起提交。
+- 可以用 `git diff .agent-handoff/` 审计接力状态是否同步。
 
 ## Recovery Summary
 
