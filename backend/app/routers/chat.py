@@ -26,7 +26,17 @@ async def chat(request: ChatRequest) -> dict[str, str]:
         if session is None:
             raise HTTPException(status_code=404, detail="会话不存在")
 
+    answer = f"收到你的问题：{request.query}"
+    messages = session["messages"]
+    messages.append({
+        "role": "user",
+        "content": request.query,
+    })
+    messages.append({
+        "role": "assistant",
+        "content": answer,
+    })
     return {
-        "answer": f"收到你的问题：{request.query}",
+        "answer": answer,
         "session_id": session["session_id"],
     }
