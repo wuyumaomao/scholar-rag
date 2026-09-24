@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.store import create_session, get_session
+from app.store import add_message, create_session, get_session, touch_session
 
 router = APIRouter()
 
@@ -22,20 +22,14 @@ async def chat(request: ChatRequest) -> dict[str, str]:
     if request.session_id is None:
         session = create_session(title=request.query[:50])
     else:
-        session = get_session(request.session_id, update_timestamp=True)
+        session = get_session(request.session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="会话不存在")
+        touch_session(request.session_id)
 
     answer = f"收到你的问题：{request.query}"
-    messages = session["messages"]
-    messages.append({
-        "role": "user",
-        "content": request.query,
-    })
-    messages.append({
-        "role": "assistant",
-        "content": answer,
-    })
+    add_message(session["session_id"], "user", request.query)
+    add_message(session["session_id"], "assistant", answer)
     return {
         "answer": answer,
         "session_id": session["session_id"],
