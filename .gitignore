@@ -59,3 +59,7 @@ frontend/dist/
 .DS_Store
 Thumbs.db
 /tmp/badminton_frames
+
+# Agent handoff（临时工作状态，不进版本库；本地文件保留）
+/.agent-handoff/
+/AGENT_HANDOFF.md
