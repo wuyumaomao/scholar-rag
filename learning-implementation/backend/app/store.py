@@ -122,3 +122,71 @@ def list_messages(session_id: str) -> list[dict[str, str]]:
             rows = cur.fetchall()
 
     return [{"role": row[0], "content": row[1]} for row in rows]
+
+
+def _file_from_row(row: tuple[object, ...]) -> dict[str, object]:
+    """将文件表查询结果转换为 API 使用的字典。"""
+    return {
+        "file_id": row[0],
+        "filename": row[1],
+        "size_bytes": row[2],
+        "created_at": row[3].timestamp(),
+    }
+
+
+def create_file(file_id: str, filename: str, size_bytes: int) -> dict[str, object]:
+    """保存已上传文件的元数据。"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO files (file_id, filename, size_bytes)
+                VALUES (%s, %s, %s)
+                RETURNING file_id, filename, size_bytes, created_at
+                """,
+                (file_id, filename, size_bytes),
+            )
+            row = cur.fetchone()
+
+    return _file_from_row(row)
+
+
+def list_files() -> list[dict[str, object]]:
+    """按创建时间倒序返回文件元数据。"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT file_id, filename, size_bytes, created_at
+                FROM files
+                ORDER BY created_at DESC
+                """
+            )
+            rows = cur.fetchall()
+
+    return [_file_from_row(row) for row in rows]
+
+
+def get_file(file_id: str) -> dict[str, object] | None:
+    """按 ID 查询文件元数据。"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT file_id, filename, size_bytes, created_at
+                FROM files
+                WHERE file_id = %s
+                """,
+                (file_id,),
+            )
+            row = cur.fetchone()
+
+    return _file_from_row(row) if row is not None else None
+
+
+def delete_file(file_id: str) -> bool:
+    """删除文件元数据。"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM files WHERE file_id = %s", (file_id,))
+            return cur.rowcount == 1

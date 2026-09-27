@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+
+from app.store import create_file, delete_file, get_file, list_files
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -50,6 +52,7 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict[str, object]:
         await asyncio.to_thread(UPLOAD_DIR.mkdir, parents=True, exist_ok=True)#这地方的同步函数有可能卡住，得分发出去。to_thread() 的主要作用不是加速这一次上传，而是避免阻塞事件循环
         size_bytes = await asyncio.to_thread(_save_upload, file.file, temporary_path)
         await asyncio.to_thread(os.replace, temporary_path, destination_path)
+        await asyncio.to_thread(create_file, file_id, filename, size_bytes)
     except UploadTooLargeError:
         temporary_path.unlink(missing_ok=True)
         raise HTTPException(
@@ -58,9 +61,17 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict[str, object]:
         ) from None
     except OSError as exc:
         temporary_path.unlink(missing_ok=True)
+        destination_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="文件保存失败",
+        ) from exc
+    except Exception as exc:
+        temporary_path.unlink(missing_ok=True)
+        destination_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="文件元数据保存失败",
         ) from exc
     finally:
         await file.close()
@@ -71,3 +82,31 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict[str, object]:
         "size_bytes": size_bytes,
         "status": "uploaded",
     }
+
+
+@router.get("")
+async def get_files() -> list[dict[str, object]]:
+    """返回已上传文件的元数据列表。"""
+    return await asyncio.to_thread(list_files)
+
+
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_file(file_id: str) -> Response:
+    """删除文件元数据和磁盘上的原始 PDF。"""
+    record = await asyncio.to_thread(get_file, file_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在")
+
+    destination_path = UPLOAD_DIR / f"{file_id}.pdf"
+    try:
+        await asyncio.to_thread(destination_path.unlink, missing_ok=True)
+        deleted = await asyncio.to_thread(delete_file, file_id)
+        if not deleted:
+            raise OSError("file metadata was not deleted")
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="文件删除失败",
+        ) from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

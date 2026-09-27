@@ -493,7 +493,34 @@ WHERE session_id = '某个会话 ID';
 
 数据库会自行判断是否使用 `idx_messages_session_id`，以更快定位该会话的消息。索引也可能帮助 `JOIN`、`UPDATE`、`DELETE` 等按 `session_id` 查找的操作；代价是占用额外空间，并且写入数据时需要维护索引，因此应优先为常用于 `WHERE`、`JOIN` 或 `ORDER BY` 的字段建立。
 
-### 8.5 Python 如何连接并执行 SQL
+### 8.5 文件表与上传接口
+
+上传 PDF 的第一版只负责校验扩展名和大小，并将原始文件保存到 `backend/uploads/{file_id}.pdf`。为了让上传的文件可以被列出和删除，学习版增加了 `files` 表：
+
+```sql
+CREATE TABLE IF NOT EXISTS files (
+    file_id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+```
+
+`file_id` 同时是数据库主键和磁盘文件名中的 UUID；`filename` 保存用户上传时的原始文件名；`size_bytes` 保存实际写入的字节数；`created_at` 记录元数据写入时间。数据库表保存的是管理信息，PDF 二进制内容仍保存在 `uploads/` 目录。
+
+当前文件接口是：
+
+```text
+POST   /api/files/upload       校验并保存 PDF，同时写入 files 表
+GET    /api/files               按创建时间倒序返回文件元数据
+DELETE /api/files/{file_id}     删除磁盘文件和对应的元数据
+```
+
+上传时先将内容写入临时文件，成功后原子重命名为 `{file_id}.pdf`，再写入 `files` 表。元数据写入失败时会清理已保存的文件，避免留下没有记录的 PDF。删除时先查询元数据，找不到文件返回 `404`；找到后删除磁盘文件，再删除表记录。
+
+这一阶段仍然不解析 PDF，不读取页数，不提取文本，也不生成向量。文件表只解决“这个原始文件是谁、大小是多少、什么时候上传以及如何删除”的管理问题。
+
+### 8.6 Python 如何连接并执行 SQL
 
 Python 使用 `psycopg[binary]` 驱动连接 PostgreSQL。`backend/app/database.py` 只负责提供连接：
 

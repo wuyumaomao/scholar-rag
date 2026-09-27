@@ -15,3 +15,13 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_session_id
 ON messages(session_id);
+
+CREATE TABLE IF NOT EXISTS files (
+    file_id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_files_created_at
+ON files(created_at DESC);
