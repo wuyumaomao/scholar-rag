@@ -213,6 +213,93 @@ FastAPI：提供通用 Web 运行机制
 开发者：声明接口、配置项目、编写业务逻辑、管理项目专属资源
 ```
 
+#### 异步、事件循环与线程池
+
+同步代码按顺序执行：当前函数没有完成，后面的代码就不会开始。异步代码仍然是一行一行执行，但一个异步任务在等待数据库、网络或其他 I/O 时，可以把执行权交还给事件循环，让事件循环去处理其他已经准备好的任务。
+
+事件循环可以理解为异步任务的调度器。Uvicorn 启动事件循环；FastAPI 收到 HTTP 请求后，会为路由函数安排一个协程任务。一个请求对应一个路由任务，多个请求就可能对应多个任务：
+
+```text
+请求 A -> 路由任务 A
+请求 B -> 路由任务 B
+请求 C -> 路由任务 C
+```
+
+`async def` 定义的是协程函数：
+
+```python
+async def task_a():
+    await asyncio.sleep(1)
+```
+
+调用 `task_a()` 时，得到的是协程对象，函数体还没有真正执行。协程对象可以直接等待：
+
+```python
+result = await task_a()
+```
+
+也可以注册成独立任务：
+
+```python
+task = asyncio.create_task(task_a())
+result = await task
+```
+
+这两种写法如果创建任务后马上等待，效果通常很接近。`create_task()` 的作用在于先把协程安排出去，让当前任务可以先做其他事情：
+
+```python
+task_a_handle = asyncio.create_task(task_a())
+await task_b()
+result_a = await task_a_handle
+```
+
+如果写成：
+
+```python
+await task_a()
+await task_b()
+```
+
+那么 `task_b()` 要等 `task_a()` 完成后才会被调用。这两个任务按顺序执行。不过，在 `task_a()` 等待期间，事件循环仍能处理其他已经存在的任务。`await` 不会凭空创建新任务，也不会切换到另一个事件循环。
+
+异步函数只有在内部等待异步操作时才能让出事件循环：
+
+```python
+await async_database_query()
+```
+
+如果在 `async def` 中直接调用同步阻塞函数，它仍会占住事件循环：
+
+```python
+async def handler():
+    time.sleep(5)  # 阻塞事件循环
+```
+
+`asyncio.to_thread()` 用来把这种同步阻塞函数交给线程池：
+
+```python
+result = await asyncio.to_thread(blocking_function)
+```
+
+它和 `create_task()` 的职责不同：
+
+```text
+create_task()：把协程安排给事件循环
+to_thread()：把同步阻塞函数安排给线程池
+```
+
+当前学习版的 PDF 上传接口使用了 `to_thread()`：
+
+```python
+await asyncio.to_thread(UPLOAD_DIR.mkdir, parents=True, exist_ok=True)
+size_bytes = await asyncio.to_thread(_save_upload, file.file, temporary_path)
+await asyncio.to_thread(os.replace, temporary_path, destination_path)
+```
+
+这三个操作属于同一个 HTTP 请求和同一个路由协程任务，并且因为每一步都有 `await`，所以仍然按顺序执行：先创建目录，再保存文件，最后重命名。`to_thread()` 不会让一次上传自动变快，它的作用是让文件读写在线程池中进行，使事件循环可以在等待期间处理其他请求。
+
+因此，异步主要提高并发处理能力，不代表单个请求一定更快。当前学习版的聊天和会话存储仍使用同步 `psycopg` 连接；虽然路由写成了 `async def`，同步数据库调用仍可能阻塞事件循环。以后可以改用异步数据库驱动，或把同步数据库调用放进 `asyncio.to_thread()`。
+
 ### 7.2 前端：Vite 与 Nginx
 
 前端也需要 Web 服务器来把 React 页面交给浏览器，但开发和部署使用不同工具：
@@ -304,6 +391,58 @@ docker compose down
 ```
 
 `55432:5432` 的含义是“宿主机 55432 端口映射到容器内部 PostgreSQL 的 5432 端口”。本机进程通过 `localhost:55432` 访问容器；同一 Compose 网络中的其他容器则应使用 `postgres:5432`。
+
+#### 数据卷与挂载
+
+容器自身的文件系统通常跟随容器生命周期。若 PostgreSQL 只把数据库文件写在容器内部，删除并重新创建容器后，原有表和数据可能丢失。
+
+学习版 Compose 中的这行配置：
+
+```yaml
+- learning_postgres_data:/var/lib/postgresql/data
+```
+
+表示把 Docker 管理的数据卷 `learning_postgres_data` 挂载到容器内 PostgreSQL 保存数据的目录 `/var/lib/postgresql/data`：
+
+```text
+Docker 数据卷 learning_postgres_data
+        -> 挂载到容器内部 /var/lib/postgresql/data
+        -> PostgreSQL 在该目录读写数据库文件
+```
+
+`learning_postgres_data` 是 Docker 管理的持久存储名称，底层对应 Docker 自己维护的真实磁盘位置。`/var/lib/postgresql/data` 只是 PostgreSQL 容器看到的路径。即使容器被 `docker compose down` 移除，只要没有删除数据卷，下次新容器重新挂载这个卷后，数据库和已有数据仍然存在。
+
+挂载是一个通用概念：把容器外的存储映射到容器内某个路径。常见来源有两种：
+
+| 类型 | Compose 示例 | 存储位置 | 用途 |
+|---|---|---|---|
+| Docker volume | `learning_postgres_data:/var/lib/postgresql/data` | Docker 管理的位置 | 保存数据库数据 |
+| bind mount | `./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro` | 项目目录中的实际文件 | 提供配置、源码或初始化脚本 |
+
+`init.sql` 的挂载中，左侧是宿主机项目中的文件，右侧是容器路径；末尾 `:ro` 表示只读，容器可以读取脚本但不能修改宿主机的原文件。
+
+Docker volume 默认通常没有单独的固定容量上限，会随着数据库表、索引、事务日志和临时文件增长，直到 Docker 可用磁盘空间不足。可以查看 Docker 使用空间和卷信息：
+
+```cmd
+docker system df -v
+docker volume inspect learning-implementation_learning_postgres_data
+```
+
+Compose 往往会在卷名前加项目名前缀，因此实际卷名可能是 `learning-implementation_learning_postgres_data`，而不是配置里写的 `learning_postgres_data`。
+
+以下命令会删除当前 Compose 项目未被保留的容器，但默认保留 volume：
+
+```cmd
+docker compose down
+```
+
+以下命令会连同项目数据卷一起删除，因此学习数据库中的表和数据无法恢复，执行前必须确认不再需要它们：
+
+```cmd
+docker compose down -v
+```
+
+`docker volume prune` 会删除所有未被容器使用的数据卷，也需要先确认没有要保留的数据库数据。
 
 ### 8.3 表与关系
 
