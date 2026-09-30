@@ -518,7 +518,33 @@ DELETE /api/files/{file_id}     删除磁盘文件和对应的元数据
 
 上传时先将内容写入临时文件，成功后原子重命名为 `{file_id}.pdf`，再写入 `files` 表。元数据写入失败时会清理已保存的文件，避免留下没有记录的 PDF。删除时先查询元数据，找不到文件返回 `404`；找到后删除磁盘文件，再删除表记录。
 
-这一阶段仍然不解析 PDF，不读取页数，不提取文本，也不生成向量。文件表只解决“这个原始文件是谁、大小是多少、什么时候上传以及如何删除”的管理问题。
+文件管理完成后，学习版先用独立模块验证 PDF 解析，不把解析逻辑直接塞进上传路由。`backend/app/pdf_parser.py` 使用 Docling 的 `DocumentConverter`，把每个文档元素保存为结构化数据：
+
+```python
+from app.pdf_parser import extract_body_text, parse_pdf
+
+result = parse_pdf("paper.pdf")
+print(result.page_count)
+for element in result.elements:
+    print(element.order, element.element_type, element.text)
+print(extract_body_text(result))
+```
+
+`ParsedPdf` 保存页数和元素列表。每个 `ParsedElement` 保存本次解析内的 ID、学习版类型、Docling 原始类型/类别、文本、原始遍历顺序、页码、bbox、章节路径、来源位置和相关元素 ID。`to_dict()` 可将结果转换为 JSON 可序列化的字典。图片、表格和图注各自是独立元素；图片元素不通过 Markdown 回退重复导出图注。
+
+Docling 的一个文字元素可能跨越多页。`page_num` 和 `bbox` 便于定位该元素的第一个页面来源；`provenance` 列表保留 Docling 返回的全部页码和 bbox，因此不会把跨页段落拆成多个元素，也不会丢掉后续页面的坐标。`order` 记录 Docling 原始遍历位置，过滤图内数字后保留原始序号空档，不按 bbox 自行重排。
+
+`section_path` 根据 Docling 标题层级保存当前章节上下文。当前 Docling 版本对这篇样例论文的标题都返回 `level=1`，所以真实结果中路径会随每个新标题切换；测试也覆盖了 Docling 提供多个层级时，标题栈如何截断旧子级。`related_ids` 用于连接图片/表格与独立图注，也会在明确且唯一匹配时连接正文中的 `Fig. 1`、`Table I` 等引用。遇到重复编号而目标不唯一时，不猜测关系。未知 Docling 类型会以 `unknown` 保留，并同时记录其原始 Python 类型和类别。
+
+需要正文视图时使用 `extract_body_text(result)`。它按 `order` 收集段落、列表项、标题和公式，跳过图片、表格、图注和脚注；元素间以空行分隔，保留 Docling 自身的段落边界，不因为图注或图片而擅自合并前后正文。`include_formulas=False` 可以排除公式。
+
+解析仍是独立模块，不接入上传路由；当前阶段不做切分、向量化或检索。
+
+#### 图片区域中的短数字
+
+PDF 里的文字除了内容，还带有页面坐标（bounding box，简称 bbox）。论文图表中可能有很小或渲染不明显的数字文字对象；Docling 仍可能把它们作为普通文本元素返回。学习版解析器通过 `is_text_inside_picture(text_item, picture_items)` 判断短纯数字是否位于同一页图片 bbox 内，并为图片边缘留 4 个 PDF 坐标点的容差；符合条件的数字不加入正文文本。
+
+这里不能全局删除纯数字，否则可能误删年份、编号或正文数据。过滤条件要同时考虑文字内容、页码和位置。这个规则只移除落在图框内或距边缘 4 点以内的 1–4 位纯数字；被过滤的元素不会进入结构化结果，其余元素保留 Docling 原始顺序。前五页诊断结果中第二页的 `250/200/150/100/50` 被过滤。少数正文块仍可能在图片或图注附近分散；本阶段忠实保留 Docling 的元素边界，不预处理原 PDF，也不擅自合并段落。
 
 ### 8.6 Python 如何连接并执行 SQL
 
