@@ -538,13 +538,68 @@ Docling 的一个文字元素可能跨越多页。`page_num` 和 `bbox` 便于�
 
 需要正文视图时使用 `extract_body_text(result)`。它按 `order` 收集段落、列表项、标题和公式，跳过图片、表格、图注和脚注；元素间以空行分隔，保留 Docling 自身的段落边界，不因为图注或图片而擅自合并前后正文。`include_formulas=False` 可以排除公式。
 
-解析仍是独立模块，不接入上传路由；当前阶段不做切分、向量化或检索。
+解析仍是独立模块，不接入上传路由；chunking 也先作为独立模块验证，不自动触发上传解析，不接入向量化或检索。
 
 #### 图片区域中的短数字
 
 PDF 里的文字除了内容，还带有页面坐标（bounding box，简称 bbox）。论文图表中可能有很小或渲染不明显的数字文字对象；Docling 仍可能把它们作为普通文本元素返回。学习版解析器通过 `is_text_inside_picture(text_item, picture_items)` 判断短纯数字是否位于同一页图片 bbox 内，并为图片边缘留 4 个 PDF 坐标点的容差；符合条件的数字不加入正文文本。
 
 这里不能全局删除纯数字，否则可能误删年份、编号或正文数据。过滤条件要同时考虑文字内容、页码和位置。这个规则只移除落在图框内或距边缘 4 点以内的 1–4 位纯数字；被过滤的元素不会进入结构化结果，其余元素保留 Docling 原始顺序。前五页诊断结果中第二页的 `250/200/150/100/50` 被过滤。少数正文块仍可能在图片或图注附近分散；本阶段忠实保留 Docling 的元素边界，不预处理原 PDF，也不擅自合并段落。
+
+#### Parent/Child Chunk 与长文本切分
+
+解析元素保留 Docling 的结构边界；chunk 是为后续检索准备的文本单元。学习版通过 `backend/app/chunker.py` 将每个有文本的正文元素单独转换成一个 parent，不把相邻段落拼在一起。较长的段落、列表项和公式可以拆成多个 child；表格和图注保持完整。章节标题只更新后续正文的 `section_path`，不单独生成 parent 或检索 child，避免短标题占用 Top-k。child 记录 `parent_chunk_id`，并保留来源元素 ID、元素类型、页码、章节路径、相关元素 ID 和页面 provenance。
+
+切分使用 LangChain 的 `RecursiveCharacterTextSplitter`，默认目标长度为 500 个字符、重叠 50 个字符。分隔符依次尝试段落换行、换行、句号、问号、感叹号、分号和空格；这里数的是字符，不是模型 token。切分按单个解析元素独立进行，所以不会把图注或下一段混进当前段落。章节路径会作为上下文前缀加到 parent 和每个 child；分隔标点保留在前一个 child 末尾。
+
+parent 和 child 是从解析文本派生的两种表示，不是两份原始 PDF。当前实现只在运行期间返回这两组对象，并写入检查用 Markdown；尚未将 chunk 保存到数据库或 Milvus。若以后持久化，通常会保存 parent 供命中后取回更完整上下文，并单独保存/向量化较小的 child；原 PDF 仍只保留一份。过滤章节标题后，当前样例生成 179 个 parent、223 个 child，其中 24 个 parent 被拆分；可用下面的命令重新生成完整预览：
+
+```cmd
+cd learning-implementation\backend
+..\.venv\Scripts\python.exe -X utf8 scripts\export_chunks.py
+```
+
+预览默认写入 `backend/docling-inspection/chunks_preview.md`，按 Parents 和 Children 两部分展示，便于检查每个 child 是否保留了足够的上下文、边界是否合适。这个诊断报告位于本地忽略目录，不会作为正式解析结果提交。
+
+#### Child Chunk 的 Embedding
+
+chunk 生成后，下一步是把用于检索的 child 文本转换成向量。学习版的 `backend/app/embedding.py` 用 `EmbeddingService` 封装 Sentence Transformers：`embed_texts()` 批量处理多个 child，`embed_query()` 处理用户问题，`dimension` 返回模型向量维度。默认模型沿用原项目配置的 `BAAI/bge-small-en-v1.5`。
+
+嵌入模型把一段文本映射成固定长度的数字数组。语义相近的文本，其向量通常更接近；后续向量库会根据这种距离返回 Top-k child。服务要求模型返回归一化向量，便于后续使用余弦相似度或内积比较。当前模块只负责“文本 → 向量”，不保存向量，也不连接 Milvus。
+
+第一次真实运行会下载模型文件，因此先安装依赖，再执行最小验证：
+
+```cmd
+cd learning-implementation
+uv pip install --python .venv\Scripts\python.exe -r backend\requirements.txt
+cd backend
+..\.venv\Scripts\python.exe -c "from app.embedding import EmbeddingService; s=EmbeddingService(); v=s.embed_texts(['RAG combines retrieval and generation.']); q=s.embed_query('What is RAG?'); print('dimension:', s.dimension); print('document:', len(v), len(v[0])); print('query:', len(q))"
+```
+
+验证结果应显示一个文档向量、一个查询向量，并且两者维度相同。这个阶段只验证模型和接口是否正常；等向量化通过后，再实现本地相似度检索，最后接 Milvus。
+
+#### 本地 Cosine Top-k 检索
+
+Embedding 验证后，学习版先用 `backend/app/retriever.py` 的 `InMemoryRetriever` 做本地检索。它接收一组 child 和对应向量，查询时接收问题向量，计算每个 child 与问题的余弦相似度，按分数从高到低返回前 `top_k` 个 `RetrievalHit`。这个阶段不需要 Milvus，目的是单独验证向量化和检索排序是否符合预期。
+
+```python
+retriever = InMemoryRetriever(children, child_vectors)
+query_vector = embedding_service.embed_query("How is depth estimated from endoscopy images?")
+hits = retriever.search(query_vector, top_k=3)
+for hit in hits:
+    print(hit.score, hit.chunk.chunk_id, hit.chunk.context[:160])
+```
+
+这里搜索的是 child；命中后可以用 `hit.chunk.parent_chunk_id` 找到完整 parent。`top_k=3` 表示最多返回三个 child，不代表答案一定正确；之后要用人工标注的问题集计算 Recall@k 等指标。当前本地检索器把向量保存在内存中，程序退出后数据消失，下一阶段才学习 Milvus 持久化。
+
+可以用真实论文做一次端到端的本地验证：
+
+```cmd
+cd learning-implementation\backend
+..\.venv\Scripts\python.exe -c "from app.pdf_parser import parse_pdf; from app.chunker import create_chunks; from app.embedding import EmbeddingService; from app.retriever import InMemoryRetriever; r=parse_pdf('../1710.11216v3.pdf'); c=create_chunks(r).children; e=EmbeddingService(); vs=e.embed_texts([x.context for x in c]); hits=InMemoryRetriever(c,vs).search(e.embed_query('How is depth estimated from endoscopy images?'),top_k=3); [print(h.score, h.chunk.chunk_id, h.chunk.context[:160].replace(chr(10), ' ')) for h in hits]"
+```
+
+应看到三个按分数降序排列的 child。由于这是英文论文和通用 Embedding 模型，先观察结果是否落在 depth estimation 相关段落，不要把一次 Top-k 输出当成正式评测结论。
 
 ### 8.6 Python 如何连接并执行 SQL
 

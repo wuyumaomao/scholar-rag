@@ -6,6 +6,8 @@ fastapi==0.141.1
 uvicorn[standard]==0.53.0
 python-multipart==0.0.20
 docling>=2.0.0
+langchain-text-splitters
+sentence-transformers>=3.0.0
 
 #安装驱动
 psycopg[binary]
