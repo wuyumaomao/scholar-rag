@@ -13,6 +13,7 @@ from app.pdf_parser import parse_pdf
 
 PDF_PATH = BACKEND_DIR.parent / "1710.11216v3.pdf"
 OUTPUT_PATH = BACKEND_DIR / "docling-inspection" / "chunks_preview.md"
+FIGURE_DIR = BACKEND_DIR / "data" / "figures" / PDF_PATH.stem
 
 
 def _format_chunk(chunk: Chunk) -> list[str]:
@@ -31,7 +32,7 @@ def main() -> None:
     if not PDF_PATH.is_file():
         raise FileNotFoundError(f"PDF 文件不存在: {PDF_PATH}")
 
-    parsed_pdf = parse_pdf(PDF_PATH)
+    parsed_pdf = parse_pdf(PDF_PATH, figure_dir=FIGURE_DIR)
     result = create_chunks(parsed_pdf)
     split_parent_ids = {
         child.parent_chunk_id
@@ -48,7 +49,7 @@ def main() -> None:
         f"- Parent 数：{len(result.parents)}",
         f"- Child 数：{len(result.children)}",
         f"- 被拆分的 Parent 数：{len(split_parent_ids)}",
-        "- 规则：不合并不同结构化元素；长段落、列表项和公式可拆分；表格和图注保持完整；章节标题只作为正文章节上下文。",
+        "- 规则：不合并不同结构化元素；长段落、列表项和公式可拆分；图注并入 figure chunk；表格保持完整；章节标题只作为正文章节上下文。",
         "- Parent 与 Child 分节展示；每个 Child 保留来源元素 ID、页码、章节路径和相关元素 ID。",
         "",
         "## Parents",

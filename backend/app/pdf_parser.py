@@ -26,6 +26,7 @@ class ParsedElement:
     page_num: int
     order: int
     bbox: tuple[float, float, float, float] | None
+    image_path: str | None = None
     provenance: list[ParsedProvenance] = field(default_factory=list)
     section_path: list[str] = field(default_factory=list)
     related_ids: list[str] = field(default_factory=list)
@@ -141,6 +142,56 @@ def _item_text(item: Any, document: Any, element_type: str) -> str:
             except TypeError:
                 text = ""
     return str(text).strip() if text else ""
+
+
+def _extract_figure_images(
+    pdf_path: Path,
+    elements: list[ParsedElement],
+    figure_dir: Path,
+) -> list[ParsedElement]:
+    """按 Docling bbox 裁剪图片，并把保存路径写回 figure 元素。"""
+    if not any(
+        element.element_type == "figure" and element.bbox and element.page_num > 0
+        for element in elements
+    ):
+        return elements
+
+    try:
+        import fitz
+    except ImportError as exc:
+        raise RuntimeError(
+            "需要安装 PyMuPDF 才能裁剪图片：uv pip install pymupdf"
+        ) from exc
+
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    with fitz.open(pdf_path) as pdf:
+        updated: list[ParsedElement] = []
+        for element in elements:
+            if element.element_type != "figure" or not element.bbox:
+                updated.append(element)
+                continue
+
+            page_index = element.page_num - 1
+            if page_index < 0 or page_index >= len(pdf):
+                updated.append(element)
+                continue
+
+            page = pdf[page_index]
+            page_height = page.rect.height
+            left, top, right, bottom = element.bbox
+            rect = fitz.Rect(left, page_height - top, right, page_height - bottom)
+            rect = rect + fitz.Rect(-4, -4, 4, 4)
+            rect &= page.rect
+            if rect.is_empty or rect.is_infinite:
+                updated.append(element)
+                continue
+
+            image_path = figure_dir / f"page{element.page_num}_order{element.order}.png"
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0), clip=rect)
+            pixmap.save(str(image_path))
+            updated.append(replace(element, image_path=str(image_path)))
+
+    return updated
 
 
 def _item_label(item: Any) -> str | None:
@@ -299,7 +350,12 @@ def _link_elements(
     ]
 
 
-def parse_pdf(pdf_path: str | Path, converter: Any | None = None) -> ParsedPdf:
+def parse_pdf(
+    pdf_path: str | Path,
+    converter: Any | None = None,
+    *,
+    figure_dir: str | Path | None = None,
+) -> ParsedPdf:
     """使用 Docling 解析 PDF，返回带类型、位置和关系的结构化元素。"""
     path = Path(pdf_path)
     if not path.is_file():
@@ -359,6 +415,8 @@ def parse_pdf(pdf_path: str | Path, converter: Any | None = None) -> ParsedPdf:
         )
 
     elements = _link_elements(parsed_items)
+    if figure_dir is not None:
+        elements = _extract_figure_images(path, elements, Path(figure_dir))
     return ParsedPdf(page_count=_page_count(document, elements), elements=elements)
 
 
