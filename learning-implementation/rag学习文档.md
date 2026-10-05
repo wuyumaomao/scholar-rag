@@ -548,11 +548,13 @@ PDF 里的文字除了内容，还带有页面坐标（bounding box，简称 bbo
 
 #### Parent/Child Chunk 与长文本切分
 
-解析元素保留 Docling 的结构边界；chunk 是为后续检索准备的文本单元。学习版通过 `backend/app/chunker.py` 将每个有文本的正文元素单独转换成一个 parent，不把相邻段落拼在一起。较长的段落、列表项和公式可以拆成多个 child；表格和图注保持完整。章节标题只更新后续正文的 `section_path`，不单独生成 parent 或检索 child，避免短标题占用 Top-k。child 记录 `parent_chunk_id`，并保留来源元素 ID、元素类型、页码、章节路径、相关元素 ID 和页面 provenance。
+解析元素保留 Docling 的结构边界；chunk 是为后续检索准备的文本单元。学习版通过 `backend/app/chunker.py` 将每个有文本的正文元素单独转换成一个 parent，不把相邻段落拼在一起。较长的段落、列表项和公式可以拆成多个 child；表格保持完整。若一个 caption 与表格相关联，且 caption 文本已包含在表格元素文本中，chunker 会跳过这个重复 caption chunk；结构化解析结果仍保留原 caption 和关联关系，而 table chunk 的 `related_element_ids` 会排除已折叠 caption 的 ID。章节标题只更新后续正文的 `section_path`，不单独生成 parent 或检索 child，避免短标题占用 Top-k。child 记录 `parent_chunk_id`，并保留来源元素 ID、元素类型、页码、章节路径、相关元素 ID 和页面 provenance。
+
+图片使用 figure chunk 表示。解析阶段仍保留 `figure` 和 `caption` 两个结构化元素；chunk 阶段把关联 caption 的文字合并到 figure 的 `context`，并跳过这个 caption 的独立 chunk，避免同一段图注重复 embedding。figure 不拆分，所以 figure parent 和 figure child 的 `context` 相同；child 用于检索，parent 用于命中后的完整上下文。传入 `parse_pdf(..., figure_dir=...)` 后，学习版会用 PyMuPDF 按 figure 的 bbox 将图片裁剪到独立目录，图片路径写入 parent 和 child 的 metadata：`image_path`。图片二进制本身不做文本 embedding，命中 figure child 后再根据 `image_path` 交给 VLM。
 
 切分使用 LangChain 的 `RecursiveCharacterTextSplitter`，默认目标长度为 500 个字符、重叠 50 个字符。分隔符依次尝试段落换行、换行、句号、问号、感叹号、分号和空格；这里数的是字符，不是模型 token。切分按单个解析元素独立进行，所以不会把图注或下一段混进当前段落。章节路径会作为上下文前缀加到 parent 和每个 child；分隔标点保留在前一个 child 末尾。
 
-parent 和 child 是从解析文本派生的两种表示，不是两份原始 PDF。当前实现只在运行期间返回这两组对象，并写入检查用 Markdown；尚未将 chunk 保存到数据库或 Milvus。若以后持久化，通常会保存 parent 供命中后取回更完整上下文，并单独保存/向量化较小的 child；原 PDF 仍只保留一份。过滤章节标题后，当前样例生成 179 个 parent、223 个 child，其中 24 个 parent 被拆分；可用下面的命令重新生成完整预览：
+parent 和 child 是从解析文本派生的两种表示，不是两份原始 PDF。当前实现只在运行期间返回这两组对象，并写入检查用 Markdown；尚未将 chunk 保存到数据库或 Milvus。若以后持久化，通常会保存 parent 供命中后取回更完整上下文，并单独保存/向量化较小的 child；原 PDF 仍只保留一份。过滤章节标题和表格内重复 caption 后，当前样例生成 175 个 parent、219 个 child，其中 24 个 parent 被拆分；可用下面的命令重新生成完整预览：
 
 ```cmd
 cd learning-implementation\backend

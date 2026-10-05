@@ -37,7 +37,10 @@ def _section_prefix(element: ParsedElement) -> str:
     return ""
 
 
-def _metadata_for(element: ParsedElement) -> dict[str, object]:
+def _metadata_for(
+    element: ParsedElement,
+    excluded_related_ids: set[str] | None = None,
+) -> dict[str, object]:
     """Copy source and layout information into a JSON-friendly metadata map."""
     provenance = [
         {"page_num": source.page_num, "bbox": source.bbox}
@@ -51,10 +54,68 @@ def _metadata_for(element: ParsedElement) -> dict[str, object]:
         "element_types": [element.element_type],
         "page_nums": page_nums,
         "section_path": list(element.section_path),
-        "related_element_ids": list(element.related_ids),
+        "related_element_ids": [
+            related_id
+            for related_id in element.related_ids
+            if related_id not in (excluded_related_ids or set())
+        ],
         "orders": [element.order],
         "provenance": provenance,
+        "image_path": element.image_path or "",
     }
+
+
+def _duplicate_table_caption_ids(elements: list[ParsedElement]) -> set[str]:
+    """Find table captions whose text is already included in the table element."""
+    tables = {
+        element.element_id: " ".join(element.text.split()).casefold()
+        for element in elements
+        if element.element_type == "table" and element.text.strip()
+    }
+    duplicate_ids: set[str] = set()
+    for element in elements:
+        if element.element_type != "caption" or not element.text.strip():
+            continue
+        caption_text = " ".join(element.text.split()).casefold()
+        for related_id in element.related_ids:
+            table_text = tables.get(related_id)
+            if table_text and caption_text in table_text:
+                duplicate_ids.add(element.element_id)
+                break
+    return duplicate_ids
+
+
+def _figure_caption_ids(elements: list[ParsedElement]) -> set[str]:
+    """Find captions consumed by an associated figure chunk."""
+    by_id = {element.element_id: element for element in elements}
+    return {
+        related_id
+        for element in elements
+        if element.element_type == "figure"
+        for related_id in element.related_ids
+        if by_id.get(related_id, None) is not None
+        and by_id[related_id].element_type == "caption"
+        and by_id[related_id].text.strip()
+    }
+
+
+def _context_for(element: ParsedElement, elements_by_id: dict[str, ParsedElement]) -> str:
+    """Build retrieval text, attaching a figure's caption to the figure."""
+    prefix = _section_prefix(element)
+    if element.element_type == "figure":
+        captions = [
+            elements_by_id[related_id].text.strip()
+            for related_id in element.related_ids
+            if related_id in elements_by_id
+            and elements_by_id[related_id].element_type == "caption"
+            and elements_by_id[related_id].text.strip()
+        ]
+        if not captions:
+            return ""
+        text = "Figure: " + " ".join(captions)
+    else:
+        text = element.text.strip()
+    return f"{prefix}{text}" if text else ""
 
 
 def create_chunks(
@@ -80,17 +141,25 @@ def create_chunks(
         separators=_SEPARATORS,
         keep_separator="end",
     )
+    duplicate_caption_ids = _duplicate_table_caption_ids(parsed_pdf.elements)
+    figure_caption_ids = _figure_caption_ids(parsed_pdf.elements)
+    excluded_caption_ids = duplicate_caption_ids | figure_caption_ids
+    elements_by_id = {element.element_id: element for element in parsed_pdf.elements}
     parents: list[Chunk] = []
     children: list[Chunk] = []
 
     for element in sorted(parsed_pdf.elements, key=lambda candidate: candidate.order):
-        if not element.text.strip() or element.element_type == "section_header":
+        if (
+            not _context_for(element, elements_by_id)
+            or element.element_type == "section_header"
+            or element.element_id in excluded_caption_ids
+        ):
             continue
 
         parent_id = f"{element.element_id}-parent"
         prefix = _section_prefix(element)
-        context = f"{prefix}{element.text.strip()}"
-        meta = _metadata_for(element)
+        context = _context_for(element, elements_by_id)
+        meta = _metadata_for(element, duplicate_caption_ids)
         parents.append(Chunk(chunk_id=parent_id, context=context, meta=deepcopy(meta)))
 
         if element.element_type in _SPLITTABLE_TYPES and len(context) > chunk_size:

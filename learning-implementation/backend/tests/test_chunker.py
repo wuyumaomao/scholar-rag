@@ -13,6 +13,7 @@ def make_element(
     element_type: str = "paragraph",
     section_path: list[str] | None = None,
     related_ids: list[str] | None = None,
+    image_path: str | None = None,
 ) -> ParsedElement:
     return ParsedElement(
         element_id=element_id,
@@ -26,6 +27,7 @@ def make_element(
         provenance=[ParsedProvenance(page_num=2, bbox=(10.0, 700.0, 300.0, 650.0))],
         section_path=section_path or [],
         related_ids=related_ids or [],
+        image_path=image_path,
     )
 
 
@@ -81,6 +83,94 @@ def test_section_header_is_context_only_and_not_a_retrieval_chunk() -> None:
     assert [child.chunk_id for child in result.children] == ["element-000002-child-0"]
     assert "Depth Estimation from Endoscopy Images" in result.children[0].context
     assert "The method estimates" in result.children[0].context
+
+
+def test_table_caption_is_skipped_when_table_text_already_contains_it() -> None:
+    table_title = "TABLE I: A COMPARISON OF DIFFERENT ENDOSCOPY DATASETS."
+    table = make_element(
+        "element-000047",
+        f"{table_title}\n\n| Dataset | Size |\n|---|---|\n| Colon | 100 |",
+        element_type="table",
+        related_ids=["element-000048"],
+    )
+    caption = make_element(
+        "element-000048",
+        table_title,
+        element_type="caption",
+        related_ids=["element-000047"],
+    )
+
+    result = create_chunks(ParsedPdf(page_count=1, elements=[table, caption]))
+
+    assert [parent.chunk_id for parent in result.parents] == ["element-000047-parent"]
+    assert [child.chunk_id for child in result.children] == ["element-000047-child-0"]
+    assert result.children[0].context.count(table_title) == 1
+    parent = result.parents[0]
+    child = result.children[0]
+    assert table.related_ids == ["element-000048"]
+    assert parent.meta["related_element_ids"] == []
+    assert child.meta["related_element_ids"] == []
+
+
+def test_table_caption_is_kept_when_table_text_does_not_contain_it() -> None:
+    table = make_element(
+        "element-000047",
+        "| Dataset | Size |\n|---|---|\n| Colon | 100 |",
+        element_type="table",
+        related_ids=["element-000048"],
+    )
+    caption = make_element(
+        "element-000048",
+        "TABLE I: Dataset sizes.",
+        element_type="caption",
+        related_ids=["element-000047"],
+    )
+
+    result = create_chunks(ParsedPdf(page_count=1, elements=[table, caption]))
+
+    assert [parent.chunk_id for parent in result.parents] == [
+        "element-000047-parent",
+        "element-000048-parent",
+    ]
+
+
+def test_figure_uses_caption_as_context_and_skips_caption_chunk() -> None:
+    figure = make_element(
+        "element-000036",
+        "",
+        element_type="figure",
+        related_ids=["element-000037"],
+        image_path="data/figures/paper/page2_order36.png",
+    )
+    caption = make_element(
+        "element-000037",
+        "Fig. 2: The overall architecture for depth estimation.",
+        element_type="caption",
+        related_ids=["element-000036"],
+    )
+
+    result = create_chunks(ParsedPdf(page_count=2, elements=[figure, caption]))
+
+    assert [parent.chunk_id for parent in result.parents] == ["element-000036-parent"]
+    assert [child.chunk_id for child in result.children] == ["element-000036-child-0"]
+    assert result.parents[0].context == (
+        "Figure: Fig. 2: The overall architecture for depth estimation."
+    )
+    assert result.children[0].context == result.parents[0].context
+    assert result.parents[0].meta["image_path"] == "data/figures/paper/page2_order36.png"
+    assert result.children[0].meta["image_path"] == "data/figures/paper/page2_order36.png"
+
+
+def test_caption_without_figure_remains_a_caption_chunk() -> None:
+    caption = make_element(
+        "element-000037",
+        "Fig. 2: Caption without a parsed figure.",
+        element_type="caption",
+    )
+
+    result = create_chunks(ParsedPdf(page_count=1, elements=[caption]))
+
+    assert [parent.chunk_id for parent in result.parents] == ["element-000037-parent"]
 
 
 def test_long_paragraph_splits_into_children_without_merging_elements() -> None:
