@@ -592,7 +592,19 @@ for hit in hits:
     print(hit.score, hit.chunk.chunk_id, hit.chunk.context[:160])
 ```
 
-这里搜索的是 child；命中后可以用 `hit.chunk.parent_chunk_id` 找到完整 parent。`top_k=3` 表示最多返回三个 child，不代表答案一定正确；之后要用人工标注的问题集计算 Recall@k 等指标。当前本地检索器把向量保存在内存中，程序退出后数据消失，下一阶段才学习 Milvus 持久化。
+这里搜索的是 child；如果要返回完整上下文，可以在构造检索器时传入 `parents`，然后调用 `search(..., expand_parents=True)`。此时 `top_k` 表示最终返回的 parent 数，`child_top_k` 表示展开前考察多少个 child 候选；多个 child 属于同一个 parent 时只保留一次，并使用排名最高的 child 分数。例如：
+
+```python
+retriever = InMemoryRetriever(children, child_vectors, parents=chunk_result.parents)
+hits = retriever.search(
+    query_vector,
+    top_k=3,
+    child_top_k=6,
+    expand_parents=True,
+)
+```
+
+如果命中的是 figure child，展开后的 figure parent 会保留 `context`、`image_path` 和其他 metadata，后续可以据此读取图片交给 VLM。`top_k=3` 表示最终最多返回三个 parent，不代表答案一定正确；之后要用人工标注的问题集计算 Recall@k 等指标。当前本地检索器把向量保存在内存中，程序退出后数据消失，下一阶段才学习 Milvus 持久化。
 
 可以用真实论文做一次端到端的本地验证：
 

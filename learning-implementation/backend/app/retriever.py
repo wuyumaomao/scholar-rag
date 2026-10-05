@@ -9,22 +9,33 @@ from app.chunker import Chunk
 
 @dataclass(frozen=True)
 class RetrievalHit:
-    """A child chunk and its cosine similarity to the query."""
+    """A retrieved chunk and its cosine similarity to the query."""
 
     chunk: Chunk
     score: float
 
 
 class InMemoryRetriever:
-    """Rank child chunks by cosine similarity without an external vector store."""
+    """Rank child chunks and optionally expand hits to unique parents."""
 
-    def __init__(self, chunks: Sequence[Chunk], vectors: Sequence[Sequence[float]]) -> None:
+    def __init__(
+        self,
+        chunks: Sequence[Chunk],
+        vectors: Sequence[Sequence[float]],
+        *,
+        parents: Sequence[Chunk] | None = None,
+    ) -> None:
         if not chunks:
             raise ValueError("至少需要一个 chunk")
         if len(chunks) != len(vectors):
             raise ValueError("chunks 和 vectors 的数量必须一致")
 
         self._chunks = list(chunks)
+        self._parents_by_id = (
+            {parent.chunk_id: parent for parent in parents}
+            if parents is not None
+            else None
+        )
         self._vectors = [self._validate_vector(vector) for vector in vectors]
         self.dimension = len(self._vectors[0])
         if any(len(vector) != self.dimension for vector in self._vectors):
@@ -42,10 +53,26 @@ class InMemoryRetriever:
             raise ValueError("不能使用零向量")
         return values
 
-    def search(self, query_vector: Sequence[float], top_k: int = 5) -> list[RetrievalHit]:
-        """Return up to ``top_k`` chunks sorted from most to least similar."""
+    def search(
+        self,
+        query_vector: Sequence[float],
+        top_k: int = 5,
+        *,
+        child_top_k: int | None = None,
+        expand_parents: bool = False,
+    ) -> list[RetrievalHit]:
+        """Search children, optionally returning unique parent chunks.
+
+        ``top_k`` is the final result count. When ``expand_parents`` is true,
+        ``child_top_k`` controls how many child candidates are considered before
+        duplicate parents are removed; by default it considers twice ``top_k``.
+        """
         if top_k <= 0:
             raise ValueError("top_k 必须大于 0")
+        if child_top_k is not None and child_top_k <= 0:
+            raise ValueError("child_top_k 必须大于 0")
+        if expand_parents and self._parents_by_id is None:
+            raise ValueError("展开 parent 需要传入 parents")
 
         query = self._validate_vector(query_vector)
         if len(query) != self.dimension:
@@ -61,7 +88,43 @@ class InMemoryRetriever:
             for index, vector in enumerate(self._vectors)
         ]
         scored.sort(key=lambda item: (-item[1], item[0]))
-        return [
+        child_hits = [
             RetrievalHit(chunk=self._chunks[index], score=score)
-            for index, score in scored[:top_k]
+            for index, score in scored[: self._candidate_limit(top_k, child_top_k, expand_parents)]
         ]
+        if not expand_parents:
+            return child_hits[:top_k]
+        return self._expand_to_parents(child_hits, top_k)
+
+    @staticmethod
+    def _candidate_limit(
+        top_k: int,
+        child_top_k: int | None,
+        expand_parents: bool,
+    ) -> int:
+        if child_top_k is not None:
+            return child_top_k
+        return top_k * 2 if expand_parents else top_k
+
+    def _expand_to_parents(
+        self,
+        child_hits: Sequence[RetrievalHit],
+        top_k: int,
+    ) -> list[RetrievalHit]:
+        """Replace child hits with their parents and remove duplicate parents."""
+        assert self._parents_by_id is not None
+        expanded: list[RetrievalHit] = []
+        seen_parent_ids: set[str] = set()
+
+        for hit in child_hits:
+            parent_id = hit.chunk.parent_chunk_id
+            parent = self._parents_by_id.get(parent_id) if parent_id else None
+            result_chunk = parent or hit.chunk
+            if result_chunk.chunk_id in seen_parent_ids:
+                continue
+            seen_parent_ids.add(result_chunk.chunk_id)
+            expanded.append(RetrievalHit(chunk=result_chunk, score=hit.score))
+            if len(expanded) >= top_k:
+                break
+
+        return expanded
