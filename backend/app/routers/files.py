@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 
 from app.store import create_file, delete_file, get_file, list_files
+from app.routers.retrieval import invalidate_retrieval_index
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -103,6 +104,7 @@ async def remove_file(file_id: str) -> Response:
         deleted = await asyncio.to_thread(delete_file, file_id)
         if not deleted:
             raise OSError("file metadata was not deleted")
+        invalidate_retrieval_index(file_id)
     except OSError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

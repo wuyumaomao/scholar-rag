@@ -613,6 +613,24 @@ cd learning-implementation\backend
 ..\.venv\Scripts\python.exe -c "from app.pdf_parser import parse_pdf; from app.chunker import create_chunks; from app.embedding import EmbeddingService; from app.retriever import InMemoryRetriever; r=parse_pdf('../1710.11216v3.pdf'); c=create_chunks(r).children; e=EmbeddingService(); vs=e.embed_texts([x.context for x in c]); hits=InMemoryRetriever(c,vs).search(e.embed_query('How is depth estimated from endoscopy images?'),top_k=3); [print(h.score, h.chunk.chunk_id, h.chunk.context[:160].replace(chr(10), ' ')) for h in hits]"
 ```
 
+#### 本地检索 API
+
+`POST /api/retrieve` 把“解析 PDF → 创建 parent/child → 生成 child 向量 → Top-k 检索 → 展开并去重 parent”组合为一个 HTTP 请求。请求必须提供已上传 PDF 的 `file_id` 和非空 `query`，可以用 `top_k` 设置最终返回的 parent 数量，用 `child_top_k` 设置 parent 展开前考察的 child 候选数。响应中的每项包含 `chunk_id`、`score`、`context` 和 `metadata`；figure parent 的 metadata 也会包含 `image_path`。
+
+第一次查询某个 PDF 时，服务会解析并向量化整份文件，因此可能需要等待 Docling 和 embedding 模型完成加载；后续查询复用进程内缓存。服务重启后缓存会消失，并在下次查询时重新构建。当前还没有把 parent、child 或向量持久化到 Milvus/PostgreSQL。
+
+在 CMD 中先上传 PDF：
+
+```cmd
+curl.exe -X POST "http://127.0.0.1:8100/api/files/upload" -F "file=@G:\scholar-rag\learning-implementation\1710.11216v3.pdf"
+```
+
+从响应中复制 `file_id`，再查询（把示例 ID 替换成实际返回值）：
+
+```cmd
+curl.exe -X POST "http://127.0.0.1:8100/api/retrieve" -H "Content-Type: application/json" -d "{\"file_id\":\"替换为上传响应中的file_id\",\"query\":\"How is depth estimated from endoscopy images?\",\"top_k\":3,\"child_top_k\":6}"
+```
+
 应看到三个按分数降序排列的 child。由于这是英文论文和通用 Embedding 模型，先观察结果是否落在 depth estimation 相关段落，不要把一次 Top-k 输出当成正式评测结论。
 
 ### 8.6 Python 如何连接并执行 SQL
