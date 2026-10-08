@@ -13,6 +13,8 @@ from app.retrieval.hyde import HyDEError
 class FakeEmbedder:
     def __init__(self) -> None:
         self.document_calls = 0
+        self.dimension = 2
+        self.model_name = "fake-embedding"
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         self.document_calls += 1
@@ -362,6 +364,48 @@ class FakeReranker:
         )[:top_k]
 
 
+class FakeMilvusStore:
+    def __init__(self, dimension: int) -> None:
+        self.dimension = dimension
+        self.indexes: dict[str, tuple[list[Chunk], list[Chunk], list[list[float]], str]] = {}
+        self.search_calls: list[tuple[str, list[float], int, float, object]] = []
+        self.deleted: list[str] = []
+        self.replaced: list[str] = []
+
+    def load_file_index(self, file_id: str):
+        value = self.indexes.get(file_id)
+        if value is None:
+            return None
+        parents, children, _vectors, fingerprint = value
+        return parents, children, fingerprint
+
+    def replace_file_index(self, file_id, parents, children, vectors, *, fingerprint):
+        self.replaced.append(file_id)
+        self.indexes[file_id] = (list(parents), list(children), list(vectors), fingerprint)
+
+    def search_children(self, file_id, query_vector, *, top_k, min_score, filters):
+        self.search_calls.append((file_id, list(query_vector), top_k, min_score, filters))
+        parents, children, vectors, _fingerprint = self.indexes[file_id]
+        ranked = sorted(
+            zip(children, vectors),
+            key=lambda pair: -sum(a * b for a, b in zip(query_vector, pair[1])),
+        )[:top_k]
+        return [
+            retrieval_service_module.RetrievalHit(chunk, sum(a * b for a, b in zip(query_vector, vector)))
+            for chunk, vector in ranked
+            if sum(a * b for a, b in zip(query_vector, vector)) >= min_score
+        ]
+
+    def fetch_parents(self, file_id, parent_chunk_ids):
+        parents = self.indexes[file_id][0]
+        wanted = set(parent_chunk_ids)
+        return [parent for parent in parents if parent.chunk_id in wanted]
+
+    def delete_file(self, file_id):
+        self.deleted.append(file_id)
+        self.indexes.pop(file_id, None)
+
+
 def test_retrieval_service_reranks_rrf_candidates_before_final_top_k(
     tmp_path: Path,
 ) -> None:
@@ -551,3 +595,74 @@ def test_retrieval_service_expands_related_figure_after_top_k_selection(
     assert vision.calls == [
         (image_path, "Figure 5: Depth estimation architecture")
     ]
+
+
+def test_milvus_index_is_persisted_and_restored_without_reparsing(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"stable pdf bytes")
+    store = FakeMilvusStore(dimension=2)
+    first_embedder = FakeEmbedder()
+    parse_document = lambda path, *, figure_dir: parsed_pdf()
+    first_service = RetrievalService(
+        embedder=first_embedder,
+        parser=parse_document,
+        milvus_store=store,
+        settings=Settings(milvus_enabled=True, vlm_enabled=False),
+    )
+
+    first_service.index_file("file-1", pdf_path, tmp_path / "figures")
+
+    restored_embedder = FakeEmbedder()
+    restored_service = RetrievalService(
+        embedder=restored_embedder,
+        parser=parse_document,
+        milvus_store=store,
+        settings=Settings(milvus_enabled=True, vlm_enabled=False),
+    )
+    hits = restored_service.retrieve(
+        "file-1", pdf_path, "architecture", tmp_path / "figures"
+    )
+
+    assert store.replaced == ["file-1"]
+    assert restored_embedder.document_calls == 0
+    assert store.search_calls[0][0] == "file-1"
+    assert hits[0].chunk.chunk_id == "element-000001-parent"
+
+
+def test_milvus_index_is_rebuilt_when_pdf_fingerprint_changes(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"first pdf")
+    store = FakeMilvusStore(dimension=2)
+    service = RetrievalService(
+        embedder=FakeEmbedder(),
+        parser=lambda path, *, figure_dir: parsed_pdf(),
+        milvus_store=store,
+        settings=Settings(milvus_enabled=True, vlm_enabled=False),
+    )
+
+    service.index_file("file-1", pdf_path, tmp_path / "figures")
+    first_fingerprint = store.indexes["file-1"][3]
+    pdf_path.write_bytes(b"different pdf")
+    service.invalidate("file-1")
+    service.index_file("file-1", pdf_path, tmp_path / "figures")
+
+    assert store.replaced == ["file-1", "file-1"]
+    assert store.indexes["file-1"][3] != first_fingerprint
+
+
+def test_delete_file_removes_persistent_and_memory_index(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"pdf")
+    store = FakeMilvusStore(dimension=2)
+    service = RetrievalService(
+        embedder=FakeEmbedder(),
+        parser=lambda path, *, figure_dir: parsed_pdf(),
+        milvus_store=store,
+        settings=Settings(milvus_enabled=True, vlm_enabled=False),
+    )
+    service.index_file("file-1", pdf_path, tmp_path / "figures")
+
+    service.delete_file("file-1")
+
+    assert store.deleted == ["file-1"]
+    assert "file-1" not in store.indexes

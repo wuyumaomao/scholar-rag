@@ -9,7 +9,7 @@ from uuid import uuid4
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 
 from app.storage.store import create_file, delete_file, get_file, list_files
-from app.routers.retrieval import invalidate_retrieval_index
+from app.routers.retrieval import delete_retrieval_index, index_uploaded_file
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -77,6 +77,23 @@ async def upload_pdf(file: UploadFile = File(...)) -> dict[str, object]:
     finally:
         await file.close()
 
+    try:
+        await asyncio.to_thread(index_uploaded_file, file_id, destination_path)
+    except Exception as exc:
+        try:
+            await asyncio.to_thread(delete_retrieval_index, file_id)
+        except Exception:
+            pass
+        try:
+            await asyncio.to_thread(delete_file, file_id)
+        except Exception:
+            pass
+        destination_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Milvus 索引失败，文件未保存",
+        ) from exc
+
     return {
         "file_id": file_id,
         "filename": filename,
@@ -100,12 +117,12 @@ async def remove_file(file_id: str) -> Response:
 
     destination_path = UPLOAD_DIR / f"{file_id}.pdf"
     try:
+        await asyncio.to_thread(delete_retrieval_index, file_id)
         await asyncio.to_thread(destination_path.unlink, missing_ok=True)
         deleted = await asyncio.to_thread(delete_file, file_id)
         if not deleted:
             raise OSError("file metadata was not deleted")
-        invalidate_retrieval_index(file_id)
-    except OSError as exc:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="文件删除失败",

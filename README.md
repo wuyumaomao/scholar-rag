@@ -19,8 +19,9 @@ app/
   routers/                 FastAPI HTTP 接口
   documents/               PDF 结构化解析和 parent/child chunk
   retrieval/               Embedding、Dense/BM25、RRF、rerank、HyDE、VLM
+  generation/              基于检索证据组装提示词并调用 LLM
   evaluation/              benchmark 指标和解析/向量缓存
-  storage/                 PostgreSQL 连接和数据读写
+  storage/                 PostgreSQL 元数据和 Milvus parent/child 存储
 ```
 
 检索算法仍各自放在独立模块中，方便按知识点阅读和单独测试；`scripts/` 放手动运行的导出/评测工具，`tests/` 验证模块行为。
@@ -30,8 +31,8 @@ app/
 1. 最小 FastAPI 服务与健康检查接口。
 2. 会话和最小聊天 API。
 3. PDF 上传、解析与元数据存储。
-4. 文本切分、向量化与检索。
+4. 文本切分、向量化、混合检索与 Milvus 持久化。
 5. 基于检索结果生成回答。
-6. 前端流式交互、Docker 化和评测。
+6. 前端交互、Docker 化和评测。
 
 每完成一个阶段，都应补上对应的运行方式和验证步骤。当前目录从空白开始，后续代码会逐章加入。

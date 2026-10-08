@@ -68,6 +68,9 @@ class Settings:
     min_score: float = 0.8
     rrf_k: int = 60
     bm25_weight: float = 1.25
+    milvus_enabled: bool = False
+    milvus_uri: str = "http://localhost:19531"
+    milvus_collection_prefix: str = "learning_rag"
 
     llm_enabled: bool = False
     llm_base_url: str = ""
@@ -99,6 +102,11 @@ class Settings:
                 "RERANK_CANDIDATE_K", cls.rerank_candidate_k
             ),
             bm25_weight=_env_float("BM25_WEIGHT", cls.bm25_weight),
+            milvus_enabled=_env_bool("MILVUS_ENABLED", cls.milvus_enabled),
+            milvus_uri=os.getenv("MILVUS_URI", cls.milvus_uri).strip(),
+            milvus_collection_prefix=os.getenv(
+                "MILVUS_COLLECTION_PREFIX", cls.milvus_collection_prefix
+            ).strip(),
             fetch_k=_env_int("FETCH_K", cls.fetch_k),
             top_k=_env_int("TOP_K", cls.top_k),
             min_score=_env_float(
@@ -125,6 +133,10 @@ class Settings:
             raise ValueError("RERANKER_MODEL 不能为空")
         if settings.bm25_weight <= 0:
             raise ValueError("BM25_WEIGHT 必须大于 0")
+        if not settings.milvus_uri:
+            raise ValueError("MILVUS_URI 不能为空")
+        if not settings.milvus_collection_prefix:
+            raise ValueError("MILVUS_COLLECTION_PREFIX 不能为空")
         if settings.llm_enabled:
             if not settings.llm_base_url:
                 raise ValueError("启用 LLM 时必须配置 LLM_BASE_URL")

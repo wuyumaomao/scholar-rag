@@ -24,6 +24,16 @@ def invalidate_retrieval_index(file_id: str) -> None:
     retrieval_service.invalidate(file_id)
 
 
+def index_uploaded_file(file_id: str, pdf_path: Path) -> None:
+    """Parse, embed, and persist an uploaded PDF when Milvus is enabled."""
+    retrieval_service.index_file(file_id, pdf_path, FIGURE_DIR / file_id)
+
+
+def delete_retrieval_index(file_id: str) -> None:
+    """Delete persistent and in-memory indexes for one uploaded PDF."""
+    retrieval_service.delete_file(file_id)
+
+
 ElementType = Literal[
     "section_header",
     "paragraph",

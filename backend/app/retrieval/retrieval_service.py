@@ -1,6 +1,9 @@
 """Build and query an in-memory retrieval index for uploaded PDFs."""
 
 from dataclasses import dataclass
+import hashlib
+import inspect
+from importlib.metadata import PackageNotFoundError, version
 import logging
 from pathlib import Path
 from threading import RLock
@@ -17,6 +20,7 @@ from app.retrieval.retrieval_filters import FilterInput, coerce_filters
 from app.retrieval.related_context import expand_related_figure_context
 from app.retrieval.reranker import CrossEncoderReranker
 from app.retrieval.rrf import fuse_parent_hits
+from app.storage.milvus_store import MilvusChunkStore
 from app.retrieval.vlm import VLMError, VisionService
 
 
@@ -26,13 +30,15 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class _CachedIndex:
     file_signature: tuple[int, int]
+    fingerprint: str
     parents: list[Chunk]
+    children: list[Chunk]
     dense_retriever: InMemoryRetriever | None
     bm25_retriever: BM25Retriever | None
 
 
 class RetrievalService:
-    """Parse, embed, and search a PDF while caching its index in memory."""
+    """Parse, index, and search a PDF with optional persistent Milvus storage."""
 
     def __init__(
         self,
@@ -42,6 +48,7 @@ class RetrievalService:
         vision_service: VisionService | None = None,
         reranker: CrossEncoderReranker | None = None,
         hyde_generator: HyDEGenerator | None = None,
+        milvus_store: MilvusChunkStore | None = None,
         settings: Settings | None = None,
     ) -> None:
         if vision_service is not None and settings is not None:
@@ -54,6 +61,7 @@ class RetrievalService:
         self._vision_service = vision_service or VisionService(settings=self._settings)
         self._reranker = reranker
         self._hyde_generator = hyde_generator or HyDEGenerator(settings=self._settings)
+        self._milvus_store = milvus_store
         if self._reranker is None and self._settings.reranker_enabled:
             self._reranker = CrossEncoderReranker(
                 model_name=self._settings.reranker_model
@@ -104,15 +112,27 @@ class RetrievalService:
                 dense_query = query
 
         index = self._get_index(file_id, pdf_path, figure_dir)
-        if index.dense_retriever is None or index.bm25_retriever is None:
+        if index.bm25_retriever is None:
             return []
 
-        dense_hits = index.dense_retriever.search(
-            self._embedder.embed_query(dense_query),
-            top_k=resolved_child_top_k,
-            min_score=resolved_min_score,
-            filters=filters,
-        )
+        query_vector = self._embedder.embed_query(dense_query)
+        if index.dense_retriever is not None:
+            dense_hits = index.dense_retriever.search(
+                query_vector,
+                top_k=resolved_child_top_k,
+                min_score=resolved_min_score,
+                filters=filters,
+            )
+        elif self._active_milvus_store() is not None:
+            dense_hits = self._active_milvus_store().search_children(
+                file_id,
+                query_vector,
+                top_k=resolved_child_top_k,
+                min_score=resolved_min_score,
+                filters=filters,
+            )
+        else:
+            dense_hits = []
         bm25_hits = index.bm25_retriever.search(
             query,
             top_k=resolved_child_top_k,
@@ -133,6 +153,19 @@ class RetrievalService:
         )
         if self._reranker is not None:
             hits = self._reranker.rerank(query, hits, top_k=resolved_top_k)
+        store = self._active_milvus_store()
+        if store is not None and hits:
+            fetched = store.fetch_parents(
+                file_id, [hit.chunk.chunk_id for hit in hits]
+            )
+            parents_by_id = {parent.chunk_id: parent for parent in fetched}
+            hits = [
+                RetrievalHit(
+                    chunk=parents_by_id.get(hit.chunk.chunk_id, hit.chunk),
+                    score=hit.score,
+                )
+                for hit in hits
+            ]
         return expand_related_figure_context(
             hits,
             index.parents,
@@ -152,13 +185,103 @@ class RetrievalService:
         with self._lock:
             self._indexes.pop(file_id, None)
 
+    def index_file(self, file_id: str, pdf_path: Path, figure_dir: Path) -> None:
+        """Build and persist both chunk layers when Milvus is enabled."""
+        if self._active_milvus_store() is None:
+            return
+        self._get_index(file_id, pdf_path, figure_dir)
+
+    def delete_file(self, file_id: str) -> None:
+        """Delete a file's persistent Milvus records and in-memory cache."""
+        store = self._active_milvus_store()
+        if store is not None:
+            store.delete_file(file_id)
+        self.invalidate(file_id)
+
+    def _active_milvus_store(self) -> MilvusChunkStore | None:
+        if self._milvus_store is not None:
+            return self._milvus_store
+        if not self._settings.milvus_enabled:
+            return None
+        self._milvus_store = MilvusChunkStore(
+            uri=self._settings.milvus_uri,
+            collection_prefix=self._settings.milvus_collection_prefix,
+            dimension=self._embedder.dimension,
+        )
+        return self._milvus_store
+
+    def _fingerprint(self, pdf_path: Path) -> str:
+        digest = hashlib.sha256()
+        with pdf_path.open("rb") as source:
+            for block in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(block)
+        model_name = getattr(self._embedder, "model_name", self._settings.embedding_model)
+        implementation = []
+        for callable_value in (self._parser, create_chunks):
+            try:
+                module = inspect.getmodule(callable_value)
+                implementation.append(
+                    inspect.getsource(module or callable_value)
+                )
+            except (OSError, TypeError):
+                module_name = getattr(
+                    callable_value, "__module__", type(callable_value).__module__
+                )
+                qualified_name = getattr(
+                    callable_value,
+                    "__qualname__",
+                    type(callable_value).__qualname__,
+                )
+                implementation.append(
+                    f"{module_name}.{qualified_name}"
+                )
+        package_versions = []
+        for package_name in ("docling", "langchain-text-splitters"):
+            try:
+                package_versions.append(f"{package_name}={version(package_name)}")
+            except PackageNotFoundError:
+                package_versions.append(f"{package_name}=unavailable")
+        digest.update(
+            "|".join(
+                [
+                    model_name,
+                    str(self._embedder.dimension),
+                    *package_versions,
+                    *implementation,
+                ]
+            ).encode("utf-8")
+        )
+        return digest.hexdigest()
+
     def _get_index(self, file_id: str, pdf_path: Path, figure_dir: Path) -> _CachedIndex:
         stat = pdf_path.stat()
         signature = (stat.st_mtime_ns, stat.st_size)
+        store = self._active_milvus_store()
+        fingerprint = self._fingerprint(pdf_path) if store is not None else "memory-only"
         with self._lock:
             cached = self._indexes.get(file_id)
-            if cached is not None and cached.file_signature == signature:
+            if (
+                cached is not None
+                and cached.file_signature == signature
+                and cached.fingerprint == fingerprint
+            ):
                 return cached
+
+            if store is not None:
+                persisted = store.load_file_index(file_id)
+                if persisted is not None:
+                    parents, children, stored_fingerprint = persisted
+                    if stored_fingerprint == fingerprint:
+                        index = _CachedIndex(
+                            file_signature=signature,
+                            fingerprint=fingerprint,
+                            parents=parents,
+                            children=children,
+                            dense_retriever=None,
+                            bm25_retriever=(BM25Retriever(children) if children else None),
+                        )
+                        self._indexes[file_id] = index
+                        return index
 
             parsed_pdf = self._parser(pdf_path, figure_dir=figure_dir)
             chunking = create_chunks(parsed_pdf)
@@ -168,15 +291,34 @@ class RetrievalService:
                 vectors = self._embedder.embed_texts(
                     [chunk.context for chunk in chunking.children]
                 )
-                dense_retriever = InMemoryRetriever(
-                    chunking.children,
-                    vectors,
-                )
                 bm25_retriever = BM25Retriever(chunking.children)
+                if store is None:
+                    dense_retriever = InMemoryRetriever(
+                        chunking.children,
+                        vectors,
+                    )
+                else:
+                    store.replace_file_index(
+                        file_id,
+                        chunking.parents,
+                        chunking.children,
+                        vectors,
+                        fingerprint=fingerprint,
+                    )
+            elif store is not None:
+                store.replace_file_index(
+                    file_id,
+                    chunking.parents,
+                    chunking.children,
+                    [],
+                    fingerprint=fingerprint,
+                )
 
             index = _CachedIndex(
                 file_signature=signature,
+                fingerprint=fingerprint,
                 parents=chunking.parents,
+                children=chunking.children,
                 dense_retriever=dense_retriever,
                 bm25_retriever=bm25_retriever,
             )
