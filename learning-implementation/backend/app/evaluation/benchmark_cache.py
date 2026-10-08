@@ -15,12 +15,12 @@ from pathlib import Path
 import tempfile
 from typing import Any, Callable, Protocol
 
-from app.chunker import ChunkingResult, create_chunks
-from app.pdf_parser import ParsedElement, ParsedPdf, ParsedProvenance, parse_pdf
+from app.documents.chunker import ChunkingResult, create_chunks
+from app.documents.pdf_parser import ParsedElement, ParsedPdf, ParsedProvenance, parse_pdf
 
 
 logger = logging.getLogger(__name__)
-DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "benchmark-cache"
+DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "benchmark-cache"
 CACHE_SCHEMA_VERSION = 1
 
 

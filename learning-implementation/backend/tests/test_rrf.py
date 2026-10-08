@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.chunker import Chunk
-from app.retriever import RetrievalHit
-from app.rrf import fuse_parent_hits
+from app.documents.chunker import Chunk
+from app.retrieval.retriever import RetrievalHit
+from app.retrieval.rrf import fuse_parent_hits
 
 
 def make_chunk(chunk_id: str, parent_chunk_id: str | None = None) -> Chunk:

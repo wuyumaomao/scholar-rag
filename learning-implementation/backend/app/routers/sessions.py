@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from app.store import delete_session, get_session, list_messages, list_sessions
+from app.storage.store import delete_session, get_session, list_messages, list_sessions
 
 router = APIRouter()
 

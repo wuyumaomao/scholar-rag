@@ -6,7 +6,7 @@ from dataclasses import replace
 import math
 from typing import Protocol, Sequence
 
-from app.retriever import RetrievalHit
+from app.retrieval.retriever import RetrievalHit
 
 
 class _CrossEncoderModel(Protocol):

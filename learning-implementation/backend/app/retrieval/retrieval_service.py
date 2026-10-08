@@ -6,18 +6,18 @@ from pathlib import Path
 from threading import RLock
 from typing import Callable
 
-from app.chunker import Chunk, create_chunks
-from app.bm25_retriever import BM25Retriever
+from app.documents.chunker import Chunk, create_chunks
+from app.retrieval.bm25_retriever import BM25Retriever
 from app.config import Settings
-from app.embedding import EmbeddingService
-from app.hyde import HyDEGenerator
-from app.pdf_parser import ParsedPdf, parse_pdf
-from app.retriever import InMemoryRetriever, RetrievalHit
-from app.retrieval_filters import FilterInput, coerce_filters
-from app.related_context import expand_related_figure_context
-from app.reranker import CrossEncoderReranker
-from app.rrf import fuse_parent_hits
-from app.vlm import VLMError, VisionService
+from app.retrieval.embedding import EmbeddingService
+from app.retrieval.hyde import HyDEGenerator
+from app.documents.pdf_parser import ParsedPdf, parse_pdf
+from app.retrieval.retriever import InMemoryRetriever, RetrievalHit
+from app.retrieval.retrieval_filters import FilterInput, coerce_filters
+from app.retrieval.related_context import expand_related_figure_context
+from app.retrieval.reranker import CrossEncoderReranker
+from app.retrieval.rrf import fuse_parent_hits
+from app.retrieval.vlm import VLMError, VisionService
 
 
 logger = logging.getLogger(__name__)

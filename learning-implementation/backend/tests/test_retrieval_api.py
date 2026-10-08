@@ -4,9 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.pdf_parser import ParsedElement, ParsedPdf
+from app.documents.pdf_parser import ParsedElement, ParsedPdf
 from app.routers import retrieval
-from app.retrieval_service import RetrievalService
+from app.retrieval.retrieval_service import RetrievalService
 from app.routers.retrieval import RetrieveRequest
 
 

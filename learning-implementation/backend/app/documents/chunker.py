@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from app.pdf_parser import ParsedElement, ParsedPdf
+from app.documents.pdf_parser import ParsedElement, ParsedPdf
 
 
 @dataclass(frozen=True)

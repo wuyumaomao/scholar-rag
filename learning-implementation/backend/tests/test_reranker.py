@@ -1,8 +1,8 @@
 import pytest
 
-from app.chunker import Chunk
-from app.reranker import CrossEncoderReranker
-from app.retriever import RetrievalHit
+from app.documents.chunker import Chunk
+from app.retrieval.reranker import CrossEncoderReranker
+from app.retrieval.retriever import RetrievalHit
 
 
 class FakeCrossEncoder:

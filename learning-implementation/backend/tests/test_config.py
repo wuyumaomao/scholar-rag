@@ -2,7 +2,7 @@ import pytest
 
 from app import config
 from app.config import Settings
-from app.retriever import DEFAULT_MIN_SCORE
+from app.retrieval.retriever import DEFAULT_MIN_SCORE
 
 
 def test_settings_read_model_and_retrieval_configuration_from_environment(monkeypatch) -> None:

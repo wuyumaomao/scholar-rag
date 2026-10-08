@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.chunker import create_chunks
-from app.pdf_parser import ParsedElement, ParsedPdf, ParsedProvenance
+from app.documents.chunker import create_chunks
+from app.documents.pdf_parser import ParsedElement, ParsedPdf, ParsedProvenance
 
 
 def make_element(

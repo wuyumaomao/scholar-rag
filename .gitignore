@@ -43,6 +43,8 @@ benchmark/
 .coverage
 htmlcov/
 test_oureval_full.py
+/learning-implementation/backend/test-tmp-*/
+/learning-implementation/backend/tmp/pytest-*/
 
 # Benchmark audit（本地一次性审计工作区，含论文副本与抽取文本，不进版本库）
 /.benchmark-audit/

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.pdf_parser import (
+from app.documents.pdf_parser import (
     ParsedElement,
     ParsedPdf,
     extract_body_text,

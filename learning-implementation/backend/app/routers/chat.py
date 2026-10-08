@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.store import add_message, create_session, get_session, touch_session
+from app.storage.store import add_message, create_session, get_session, touch_session
 
 router = APIRouter()
 

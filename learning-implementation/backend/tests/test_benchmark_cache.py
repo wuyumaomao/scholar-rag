@@ -1,8 +1,14 @@
 from pathlib import Path
 
-from app.chunker import ChunkingResult
-from app.pdf_parser import ParsedElement, ParsedPdf
-from app.benchmark_cache import load_or_create_index
+from app.documents.chunker import ChunkingResult
+from app.documents.pdf_parser import ParsedElement, ParsedPdf
+from app.evaluation.benchmark_cache import DEFAULT_CACHE_DIR, load_or_create_index
+
+
+def test_default_cache_directory_stays_under_backend_data() -> None:
+    backend_dir = Path(__file__).resolve().parents[1]
+
+    assert DEFAULT_CACHE_DIR == backend_dir / "data" / "benchmark-cache"
 
 
 class CountingEmbedder:

@@ -1,6 +1,6 @@
 import pytest
 
-from app.evaluation import (
+from app.evaluation.metrics import (
     evaluate_dataset,
     evaluate_ranked_groups,
     evaluate_ranked_ids,
