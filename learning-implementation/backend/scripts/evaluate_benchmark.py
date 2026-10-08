@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,10 @@ from app.retriever import DEFAULT_MIN_SCORE, InMemoryRetriever
 from app.reranker import CrossEncoderReranker
 from app.rrf import fuse_parent_hits
 from app.config import Settings
+from app.hyde import HyDEGenerator
+
+
+logger = logging.getLogger(__name__)
 
 
 def load_cases(path: Path) -> list[dict[str, Any]]:
@@ -68,19 +73,38 @@ def evaluate_file(
     figure_root: Path,
     retrieval_mode: str = "dense",
     rrf_k: int = 60,
+    bm25_weight: float = 1.25,
     rerank_candidate_k: int | None = None,
     reranker: CrossEncoderReranker | None = None,
     reranker_model: str | None = None,
+    use_hyde: bool = False,
+    hyde_generator: HyDEGenerator | None = None,
 ) -> tuple[DatasetMetrics, list[dict[str, Any]]]:
     """Build an index and evaluate dense, hybrid, or hybrid-reranked retrieval."""
     if retrieval_mode not in {"dense", "hybrid", "hybrid-rerank"}:
         raise ValueError("retrieval_mode 必须是 dense、hybrid 或 hybrid-rerank")
     if rrf_k <= 0:
         raise ValueError("rrf_k 必须大于 0")
+    if bm25_weight <= 0:
+        raise ValueError("bm25_weight 必须大于 0")
     if rerank_candidate_k is not None and rerank_candidate_k <= 0:
         raise ValueError("rerank_candidate_k 必须大于 0")
     if child_top_k is not None and child_top_k <= 0:
         raise ValueError("child_top_k 必须大于 0")
+    if use_hyde:
+        if hyde_generator is not None:
+            active_hyde_generator = hyde_generator
+        else:
+            hyde_settings = Settings.from_env()
+            if not hyde_settings.llm_enabled:
+                raise ValueError("启用 HyDE 需要设置 LLM_ENABLED=true")
+            if not hyde_settings.llm_base_url:
+                raise ValueError("启用 HyDE 需要配置 LLM_BASE_URL")
+            if not hyde_settings.llm_model:
+                raise ValueError("启用 HyDE 需要配置 LLM_MODEL")
+            active_hyde_generator = HyDEGenerator(settings=hyde_settings)
+    else:
+        active_hyde_generator = None
     cases = load_cases(benchmark_path)
     parsed_pdf = parse_pdf(
         pdf_path,
@@ -119,7 +143,17 @@ def evaluate_file(
     case_reports: list[dict[str, Any]] = []
     scores = []
     for case in cases:
-        query_vector = embedder.embed_query(case["query"])
+        dense_query = case["query"]
+        if active_hyde_generator is not None:
+            try:
+                dense_query = active_hyde_generator.generate(case["query"])
+            except Exception as exc:
+                logger.warning(
+                    "HyDE generation failed for %s; using original query: %s",
+                    case.get("id", ""),
+                    exc,
+                )
+        query_vector = embedder.embed_query(dense_query)
         if retrieval_mode == "dense":
             hits = retriever.search(
                 query_vector,
@@ -148,6 +182,7 @@ def evaluate_file(
                     else k
                 ),
                 rrf_k=rrf_k,
+                bm25_weight=bm25_weight,
             )
             if active_reranker is not None:
                 hits = active_reranker.rerank(case["query"], hits, top_k=k)
@@ -195,7 +230,7 @@ def _metrics_dict(metrics: DatasetMetrics) -> dict[str, float | int]:
     }
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--benchmark-dir",
@@ -218,13 +253,24 @@ def main() -> None:
         help="dense 保持旧基线；hybrid 使用 Dense+BM25+RRF；hybrid-rerank 在 RRF 后重排",
     )
     parser.add_argument("--rrf-k", type=int, default=60)
+    parser.add_argument("--bm25-weight", type=float, default=None)
     parser.add_argument("--rerank-candidate-k", type=int, default=None)
     parser.add_argument("--reranker-model", default=None)
+    parser.add_argument(
+        "--use-hyde",
+        action="store_true",
+        help="仅将 LLM 生成的假设段落用于 Dense 查询向量",
+    )
     parser.add_argument(
         "--output",
         type=Path,
         default=PROJECT_DIR / "evaluation-results.json",
     )
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
     if args.k <= 0:
         parser.error("--k 必须大于 0")
@@ -232,6 +278,8 @@ def main() -> None:
         parser.error("--child-top-k 必须大于 0")
     if args.rrf_k <= 0:
         parser.error("--rrf-k 必须大于 0")
+    if args.bm25_weight is not None and args.bm25_weight <= 0:
+        parser.error("--bm25-weight 必须大于 0")
     if args.rerank_candidate_k is not None and args.rerank_candidate_k <= 0:
         parser.error("--rerank-candidate-k 必须大于 0")
     if not -1 <= args.min_score <= 1:
@@ -240,6 +288,13 @@ def main() -> None:
         parser.error(f"benchmark 目录不存在: {args.benchmark_dir}")
     if not args.pdf_dir.is_dir():
         parser.error(f"PDF 目录不存在: {args.pdf_dir}")
+    if args.use_hyde:
+        try:
+            hyde_settings = Settings.from_env()
+        except ValueError as exc:
+            parser.error(str(exc))
+        if not hyde_settings.llm_enabled:
+            parser.error("启用 --use-hyde 需要设置 LLM_ENABLED=true")
 
     records: list[dict[str, Any]] = []
     all_cases: list[dict[str, Any]] = []
@@ -255,6 +310,12 @@ def main() -> None:
     effective_rerank_candidate_k = args.rerank_candidate_k
     if args.retrieval_mode == "hybrid-rerank" and effective_rerank_candidate_k is None:
         effective_rerank_candidate_k = effective_settings.rerank_candidate_k
+    effective_bm25_weight = args.bm25_weight
+    if (
+        args.retrieval_mode in {"hybrid", "hybrid-rerank"}
+        and effective_bm25_weight is None
+    ):
+        effective_bm25_weight = effective_settings.bm25_weight
     run_reranker = None
     if args.retrieval_mode == "hybrid-rerank":
         run_reranker = CrossEncoderReranker(
@@ -284,9 +345,15 @@ def main() -> None:
             figure_root=BACKEND_DIR / "data" / "figures" / "benchmark",
             retrieval_mode=args.retrieval_mode,
             rrf_k=args.rrf_k,
+            bm25_weight=(
+                effective_bm25_weight
+                if effective_bm25_weight is not None
+                else 1.25
+            ),
             rerank_candidate_k=effective_rerank_candidate_k,
             reranker=run_reranker,
             reranker_model=args.reranker_model,
+            use_hyde=args.use_hyde,
         )
         records.append(
             {
@@ -294,6 +361,7 @@ def main() -> None:
                 "source_pdf": source_pdf,
                 "pdf_path": str(pdf_path),
                 "status": "ok",
+                "use_hyde": args.use_hyde,
                 "metrics": _metrics_dict(metrics),
                 "cases": case_reports,
             }
@@ -327,9 +395,11 @@ def main() -> None:
     report = {
         "k": args.k,
         "retrieval_mode": args.retrieval_mode,
+        "use_hyde": args.use_hyde,
         "child_top_k": effective_child_top_k,
         "min_score": args.min_score,
         "rrf_k": args.rrf_k if args.retrieval_mode != "dense" else None,
+        "bm25_weight": effective_bm25_weight,
         "rerank_candidate_k": effective_rerank_candidate_k,
         "reranker_model": (
             args.reranker_model or effective_settings.reranker_model

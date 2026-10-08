@@ -11,6 +11,7 @@ from app.chunker import Chunk, create_chunks
 from app.bm25_retriever import BM25Retriever
 from app.config import Settings
 from app.embedding import EmbeddingService
+from app.hyde import HyDEGenerator
 from app.pdf_parser import ParsedPdf, parse_pdf
 from app.retriever import InMemoryRetriever, RetrievalHit
 from app.reranker import CrossEncoderReranker
@@ -39,6 +40,7 @@ class RetrievalService:
         parser: Callable[..., ParsedPdf] = parse_pdf,
         vision_service: VisionService | None = None,
         reranker: CrossEncoderReranker | None = None,
+        hyde_generator: HyDEGenerator | None = None,
         settings: Settings | None = None,
     ) -> None:
         if vision_service is not None and settings is not None:
@@ -50,6 +52,7 @@ class RetrievalService:
         self._parser = parser
         self._vision_service = vision_service or VisionService(settings=self._settings)
         self._reranker = reranker
+        self._hyde_generator = hyde_generator or HyDEGenerator(settings=self._settings)
         if self._reranker is None and self._settings.reranker_enabled:
             self._reranker = CrossEncoderReranker(
                 model_name=self._settings.reranker_model
@@ -67,6 +70,7 @@ class RetrievalService:
         top_k: int | None = None,
         child_top_k: int | None = None,
         min_score: float | None = None,
+        use_hyde: bool = False,
     ) -> list[RetrievalHit]:
         """Return unique parent hits for a query over one uploaded PDF."""
         resolved_top_k = self._settings.top_k if top_k is None else top_k
@@ -83,12 +87,26 @@ class RetrievalService:
         if resolved_child_top_k <= 0:
             raise ValueError("child_top_k 必须大于 0")
 
+        dense_query = query
+        if use_hyde:
+            if not self._settings.llm_enabled:
+                raise ValueError("启用 HyDE 需要设置 LLM_ENABLED=true")
+            if not self._settings.llm_base_url:
+                raise ValueError("启用 HyDE 需要配置 LLM_BASE_URL")
+            if not self._settings.llm_model:
+                raise ValueError("启用 HyDE 需要配置 LLM_MODEL")
+            try:
+                dense_query = self._hyde_generator.generate(query)
+            except Exception as exc:
+                logger.warning("HyDE generation failed; using original query: %s", exc)
+                dense_query = query
+
         index = self._get_index(file_id, pdf_path, figure_dir)
         if index.dense_retriever is None or index.bm25_retriever is None:
             return []
 
         dense_hits = index.dense_retriever.search(
-            self._embedder.embed_query(query),
+            self._embedder.embed_query(dense_query),
             top_k=resolved_child_top_k,
             min_score=resolved_min_score,
         )
@@ -107,6 +125,7 @@ class RetrievalService:
             index.parents,
             top_k=parent_candidate_k,
             rrf_k=self._settings.rrf_k,
+            bm25_weight=self._settings.bm25_weight,
         )
         if self._reranker is not None:
             hits = self._reranker.rerank(query, hits, top_k=resolved_top_k)

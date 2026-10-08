@@ -62,11 +62,12 @@ class Settings:
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     reranker_enabled: bool = False
     reranker_model: str = DEFAULT_RERANKER_MODEL
-    rerank_candidate_k: int = 10
+    rerank_candidate_k: int = 20
     fetch_k: int = 20
     top_k: int = 5
     min_score: float = 0.8
     rrf_k: int = 60
+    bm25_weight: float = 1.25
 
     llm_enabled: bool = False
     llm_base_url: str = ""
@@ -97,6 +98,7 @@ class Settings:
             rerank_candidate_k=_env_int(
                 "RERANK_CANDIDATE_K", cls.rerank_candidate_k
             ),
+            bm25_weight=_env_float("BM25_WEIGHT", cls.bm25_weight),
             fetch_k=_env_int("FETCH_K", cls.fetch_k),
             top_k=_env_int("TOP_K", cls.top_k),
             min_score=_env_float(
@@ -121,6 +123,13 @@ class Settings:
             raise ValueError("EMBEDDING_MODEL 不能为空")
         if settings.reranker_enabled and not settings.reranker_model:
             raise ValueError("RERANKER_MODEL 不能为空")
+        if settings.bm25_weight <= 0:
+            raise ValueError("BM25_WEIGHT 必须大于 0")
+        if settings.llm_enabled:
+            if not settings.llm_base_url:
+                raise ValueError("启用 LLM 时必须配置 LLM_BASE_URL")
+            if not settings.llm_model:
+                raise ValueError("启用 LLM 时必须配置 LLM_MODEL")
         if settings.vlm_enabled:
             if not settings.vlm_base_url:
                 raise ValueError("启用 VLM 时必须配置 VLM_BASE_URL")

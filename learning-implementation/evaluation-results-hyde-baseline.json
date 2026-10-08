@@ -1,0 +1,3971 @@
+{
+  "k": 5,
+  "retrieval_mode": "hybrid-rerank",
+  "use_hyde": false,
+  "child_top_k": 20,
+  "min_score": 0.7,
+  "rrf_k": 60,
+  "rerank_candidate_k": 10,
+  "reranker_model": "G:\\models\\cross-encoder-ms-marco-MiniLM-L-6-v2",
+  "metrics_definition": {
+    "recall_at_k": "命中的 gold element 数 / gold element 总数",
+    "precision_at_k": "Top-k 中命中的 parent element 数 / k",
+    "precision_returned": "实际返回结果中命中的 parent element 数 / 实际返回结果数",
+    "mrr": "Top-k 内第一个命中 gold element 的排名倒数的宏平均"
+  },
+  "overall": {
+    "case_count": 116,
+    "recall_at_k": 0.7761836343732895,
+    "precision_at_k": 0.2396551724137931,
+    "precision_returned": 0.2396551724137931,
+    "mrr": 0.7228448275862068
+  },
+  "datasets": [
+    {
+      "benchmark_file": "1-s2.0-S2666379123005402-main.jsonl",
+      "source_pdf": "1-s2.0-S2666379123005402-main.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\1-s2.0-S2666379123005402-main.pdf",
+      "status": "ok",
+      "use_hyde": false,
+      "metrics": {
+        "case_count": 16,
+        "recall_at_k": 0.8125,
+        "precision_at_k": 0.2,
+        "precision_returned": 0.2,
+        "mrr": 0.7104166666666667
+      },
+      "cases": [
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q001",
+          "query": "What was the central hypothesis and time-course question tested in this study?",
+          "retrieved_element_ids": [
+            "element-000037",
+            "element-000035",
+            "element-000149",
+            "element-000128",
+            "element-000166"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000037"
+            ],
+            [
+              "element-000035"
+            ],
+            [
+              "element-000149"
+            ],
+            [
+              "element-000128"
+            ],
+            [
+              "element-000166"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q002",
+          "query": "How do dietary protein-derived amino acids move from ingestion to tissue protein according to the paper's framework?",
+          "retrieved_element_ids": [
+            "element-000119",
+            "element-000129",
+            "element-000120",
+            "element-000117",
+            "element-000030"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000119"
+            ],
+            [
+              "element-000129"
+            ],
+            [
+              "element-000120"
+            ],
+            [
+              "element-000117"
+            ],
+            [
+              "element-000030"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.2
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q003",
+          "query": "Who participated in the randomized trial, and what were the main eligibility characteristics?",
+          "retrieved_element_ids": [
+            "element-000290",
+            "element-000255",
+            "element-000037",
+            "element-000253",
+            "element-000217"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000290"
+            ],
+            [
+              "element-000255"
+            ],
+            [
+              "element-000037"
+            ],
+            [
+              "element-000253"
+            ],
+            [
+              "element-000217"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q004",
+          "query": "How were participants assigned to the protein-dose groups and what did each treatment drink contain?",
+          "retrieved_element_ids": [
+            "element-000297",
+            "element-000050",
+            "element-000290",
+            "element-000362",
+            "element-000301"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000297"
+            ],
+            [
+              "element-000050"
+            ],
+            [
+              "element-000290"
+            ],
+            [
+              "element-000362"
+            ],
+            [
+              "element-000301"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q005",
+          "query": "What does Figure 1 present about the experimental design and plasma responses?",
+          "retrieved_element_ids": [
+            "element-000047",
+            "element-000048",
+            "element-000037",
+            "element-000301",
+            "element-000150",
+            "element-000155"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000047",
+              "element-000048"
+            ],
+            [
+              "element-000037"
+            ],
+            [
+              "element-000301"
+            ],
+            [
+              "element-000150"
+            ],
+            [
+              "element-000155"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q006",
+          "query": "How did the 25 g and 100 g doses differ in their plasma amino acid responses over 12 hours?",
+          "retrieved_element_ids": [
+            "element-000042",
+            "element-000166",
+            "element-000150",
+            "element-000054",
+            "element-000121"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000042"
+            ],
+            [
+              "element-000166"
+            ],
+            [
+              "element-000150"
+            ],
+            [
+              "element-000054"
+            ],
+            [
+              "element-000121"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q007",
+          "query": "What happened to whole-body protein synthesis, amino acid oxidation, and net protein balance as protein dose increased?",
+          "retrieved_element_ids": [
+            "element-000054",
+            "element-000155",
+            "element-000158",
+            "element-000061",
+            "element-000027"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000054"
+            ],
+            [
+              "element-000155"
+            ],
+            [
+              "element-000158"
+            ],
+            [
+              "element-000061"
+            ],
+            [
+              "element-000027"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q008",
+          "query": "Which muscle free amino acids increased after the 100 g dose, and what did the tracer data show about incorporation into muscle protein?",
+          "retrieved_element_ids": [
+            "element-000129",
+            "element-000027",
+            "element-000099",
+            "element-000120",
+            "element-000068"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000129"
+            ],
+            [
+              "element-000027"
+            ],
+            [
+              "element-000099"
+            ],
+            [
+              "element-000120"
+            ],
+            [
+              "element-000068"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.3333333333333333
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q009",
+          "query": "What was the pre-defined primary muscle protein synthesis outcome and how was it measured?",
+          "retrieved_element_ids": [
+            "element-000102",
+            "element-000351",
+            "element-000346",
+            "element-000362",
+            "element-000103"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000102"
+            ],
+            [
+              "element-000351"
+            ],
+            [
+              "element-000346"
+            ],
+            [
+              "element-000362"
+            ],
+            [
+              "element-000103"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q010",
+          "query": "How did muscle protein synthesis respond to 100 g compared with 25 g protein across early and late postprandial periods?",
+          "retrieved_element_ids": [
+            "element-000150",
+            "element-000113",
+            "element-000103",
+            "element-000035",
+            "element-000121"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000150"
+            ],
+            [
+              "element-000113"
+            ],
+            [
+              "element-000103"
+            ],
+            [
+              "element-000035"
+            ],
+            [
+              "element-000121"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.3333333333333333
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q011",
+          "query": "What dissociation did the study find between molecular signaling and the muscle anabolic response?",
+          "retrieved_element_ids": [
+            "element-000115",
+            "element-000124",
+            "element-000125",
+            "element-000162",
+            "element-000017",
+            "element-000128"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000115"
+            ],
+            [
+              "element-000124",
+              "element-000125"
+            ],
+            [
+              "element-000162"
+            ],
+            [
+              "element-000017"
+            ],
+            [
+              "element-000128"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q012",
+          "query": "What fractions of ingested protein-derived amino acids appeared in the circulation and were incorporated into muscle after 12 hours?",
+          "retrieved_element_ids": [
+            "element-000120",
+            "element-000119",
+            "element-000117",
+            "element-000129",
+            "element-000121"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000120"
+            ],
+            [
+              "element-000119"
+            ],
+            [
+              "element-000117"
+            ],
+            [
+              "element-000129"
+            ],
+            [
+              "element-000121"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q013",
+          "query": "How large was amino acid oxidation relative to the increase in protein intake, and what did the authors infer?",
+          "retrieved_element_ids": [
+            "element-000158",
+            "element-000054",
+            "element-000063",
+            "element-000148",
+            "element-000035"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000158"
+            ],
+            [
+              "element-000054"
+            ],
+            [
+              "element-000063"
+            ],
+            [
+              "element-000148"
+            ],
+            [
+              "element-000035"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q014",
+          "query": "What integrated sequence of events is illustrated in Figure 7?",
+          "retrieved_element_ids": [
+            "element-000141",
+            "element-000084",
+            "element-000085",
+            "element-000041",
+            "element-000030",
+            "element-000053"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000141"
+            ],
+            [
+              "element-000084",
+              "element-000085"
+            ],
+            [
+              "element-000041"
+            ],
+            [
+              "element-000030"
+            ],
+            [
+              "element-000053"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q015",
+          "query": "What limitation affects the interpretation of the 100 g condition at the end of the 12-hour assessment?",
+          "retrieved_element_ids": [
+            "element-000166",
+            "element-000150",
+            "element-000113",
+            "element-000035",
+            "element-000099"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000166"
+            ],
+            [
+              "element-000150"
+            ],
+            [
+              "element-000113"
+            ],
+            [
+              "element-000035"
+            ],
+            [
+              "element-000099"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-1016-j-xcrm-2023-101324-q016",
+          "query": "To which populations may these findings not necessarily generalize?",
+          "retrieved_element_ids": [
+            "element-000166",
+            "element-000163",
+            "element-000068",
+            "element-000159",
+            "element-000160"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000166"
+            ],
+            [
+              "element-000163"
+            ],
+            [
+              "element-000068"
+            ],
+            [
+              "element-000159"
+            ],
+            [
+              "element-000160"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        }
+      ]
+    },
+    {
+      "benchmark_file": "1710.11216v3.jsonl",
+      "source_pdf": "1710.11216v3.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\1710.11216v3.pdf",
+      "status": "ok",
+      "use_hyde": false,
+      "metrics": {
+        "case_count": 15,
+        "recall_at_k": 0.7777777777777778,
+        "precision_at_k": 0.2,
+        "precision_returned": 0.2,
+        "mrr": 0.75
+      },
+      "cases": [
+        {
+          "id": "1710.11216v3-q001",
+          "query": "Why are conventional computer-vision depth cues difficult to use robustly in colonoscopy?",
+          "retrieved_element_ids": [
+            "element-000016",
+            "element-000014",
+            "element-000003",
+            "element-000019",
+            "element-000032"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000016"
+            ],
+            [
+              "element-000014"
+            ],
+            [
+              "element-000003"
+            ],
+            [
+              "element-000019"
+            ],
+            [
+              "element-000032"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "1710.11216v3-q002",
+          "query": "How did the authors create synthetic colon images for CNN-CRF pre-training?",
+          "retrieved_element_ids": [
+            "element-000039",
+            "element-000133",
+            "element-000003",
+            "element-000035",
+            "element-000117"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000039"
+            ],
+            [
+              "element-000133"
+            ],
+            [
+              "element-000003"
+            ],
+            [
+              "element-000035"
+            ],
+            [
+              "element-000117"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q003",
+          "query": "Why did the authors add training data rendered from silicone colon phantom CT?",
+          "retrieved_element_ids": [
+            "element-000041",
+            "element-000042",
+            "element-000043",
+            "element-000133",
+            "element-000117",
+            "element-000031"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000041"
+            ],
+            [
+              "element-000042",
+              "element-000043"
+            ],
+            [
+              "element-000133"
+            ],
+            [
+              "element-000117"
+            ],
+            [
+              "element-000031"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q004",
+          "query": "How did the study obtain depth ground truth for real porcine endoscopy images?",
+          "retrieved_element_ids": [
+            "element-000135",
+            "element-000110",
+            "element-000111",
+            "element-000031",
+            "element-000035",
+            "element-000045"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000135"
+            ],
+            [
+              "element-000110",
+              "element-000111"
+            ],
+            [
+              "element-000031"
+            ],
+            [
+              "element-000035"
+            ],
+            [
+              "element-000045"
+            ]
+          ],
+          "recall": 0.6666666666666666,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "1710.11216v3-q005",
+          "query": "How did the authors adapt their synthetic-data-trained model to real endoscopy images?",
+          "retrieved_element_ids": [
+            "element-000049",
+            "element-000050",
+            "element-000039",
+            "element-000032",
+            "element-000041",
+            "element-000054"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000049",
+              "element-000050"
+            ],
+            [
+              "element-000039"
+            ],
+            [
+              "element-000032"
+            ],
+            [
+              "element-000041"
+            ],
+            [
+              "element-000054"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "1710.11216v3-q006",
+          "query": "According to Figure 5, what are the main stages of the monocular endoscopy depth-estimation network?",
+          "retrieved_element_ids": [
+            "element-000065",
+            "element-000066",
+            "element-000049",
+            "element-000050",
+            "element-000141",
+            "element-000016",
+            "element-000020"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000065",
+              "element-000066"
+            ],
+            [
+              "element-000049",
+              "element-000050"
+            ],
+            [
+              "element-000141"
+            ],
+            [
+              "element-000016"
+            ],
+            [
+              "element-000020"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q007",
+          "query": "Which image cues did the pairwise potential use to encourage smooth depth between neighboring superpixels?",
+          "retrieved_element_ids": [
+            "element-000067",
+            "element-000061",
+            "element-000049",
+            "element-000050",
+            "element-000065",
+            "element-000066",
+            "element-000062"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000067"
+            ],
+            [
+              "element-000061"
+            ],
+            [
+              "element-000049",
+              "element-000050"
+            ],
+            [
+              "element-000065",
+              "element-000066"
+            ],
+            [
+              "element-000062"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q008",
+          "query": "How does the paper characterize the solution to the MAP depth-estimation problem?",
+          "retrieved_element_ids": [
+            "element-000099",
+            "element-000055",
+            "element-000003",
+            "element-000017",
+            "element-000141"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000099"
+            ],
+            [
+              "element-000055"
+            ],
+            [
+              "element-000003"
+            ],
+            [
+              "element-000017"
+            ],
+            [
+              "element-000141"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q009",
+          "query": "In Table I, which datasets have depth ground truth and are used for training?",
+          "retrieved_element_ids": [
+            "element-000035",
+            "element-000026",
+            "element-000027",
+            "element-000036",
+            "element-000037",
+            "element-000028",
+            "element-000016"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000035"
+            ],
+            [
+              "element-000026",
+              "element-000027"
+            ],
+            [
+              "element-000036",
+              "element-000037"
+            ],
+            [
+              "element-000028"
+            ],
+            [
+              "element-000016"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "1710.11216v3-q010",
+          "query": "What train-validation-test split and training schedule did the authors use?",
+          "retrieved_element_ids": [
+            "element-000117",
+            "element-000133",
+            "element-000105",
+            "element-000016",
+            "element-000036",
+            "element-000037"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000117"
+            ],
+            [
+              "element-000133"
+            ],
+            [
+              "element-000105"
+            ],
+            [
+              "element-000016"
+            ],
+            [
+              "element-000036",
+              "element-000037"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q011",
+          "query": "How did CNN-CRF perform against the unary-only model on the synthetic Blender test set?",
+          "retrieved_element_ids": [
+            "element-000115",
+            "element-000039",
+            "element-000030",
+            "element-000133",
+            "element-000003"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000115"
+            ],
+            [
+              "element-000039"
+            ],
+            [
+              "element-000030"
+            ],
+            [
+              "element-000133"
+            ],
+            [
+              "element-000003"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q012",
+          "query": "What relative error did CNN-CRF obtain on real porcine endoscopy, and how many images were evaluated?",
+          "retrieved_element_ids": [
+            "element-000003",
+            "element-000141",
+            "element-000133",
+            "element-000130",
+            "element-000135"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000003"
+            ],
+            [
+              "element-000141"
+            ],
+            [
+              "element-000133"
+            ],
+            [
+              "element-000130"
+            ],
+            [
+              "element-000135"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.25
+        },
+        {
+          "id": "1710.11216v3-q013",
+          "query": "What did the authors report about results on human colonoscopy images?",
+          "retrieved_element_ids": [
+            "element-000139",
+            "element-000135",
+            "element-000031",
+            "element-000133",
+            "element-000157"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000139"
+            ],
+            [
+              "element-000135"
+            ],
+            [
+              "element-000031"
+            ],
+            [
+              "element-000133"
+            ],
+            [
+              "element-000157"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q014",
+          "query": "What limitations of the proposed depth-estimation method do the authors identify?",
+          "retrieved_element_ids": [
+            "element-000142",
+            "element-000143",
+            "element-000136",
+            "element-000137",
+            "element-000016",
+            "element-000019"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000142"
+            ],
+            [
+              "element-000143"
+            ],
+            [
+              "element-000136",
+              "element-000137"
+            ],
+            [
+              "element-000016"
+            ],
+            [
+              "element-000019"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "1710.11216v3-q015",
+          "query": "What does the paper conclude about synthetic data and validation on real tissue?",
+          "retrieved_element_ids": [
+            "element-000141",
+            "element-000003",
+            "element-000031",
+            "element-000117",
+            "element-000133"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000141"
+            ],
+            [
+              "element-000003"
+            ],
+            [
+              "element-000031"
+            ],
+            [
+              "element-000117"
+            ],
+            [
+              "element-000133"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        }
+      ]
+    },
+    {
+      "benchmark_file": "Dense_Depth_Estimation_in_Monocular_Endoscopy_With_Self-Supervised_Learning_Methods.jsonl",
+      "source_pdf": "Dense_Depth_Estimation_in_Monocular_Endoscopy_With_Self-Supervised_Learning_Methods.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\Dense_Depth_Estimation_in_Monocular_Endoscopy_With_Self-Supervised_Learning_Methods.pdf",
+      "status": "ok",
+      "use_hyde": false,
+      "metrics": {
+        "case_count": 15,
+        "recall_at_k": 0.8444444444444444,
+        "precision_at_k": 0.22666666666666668,
+        "precision_returned": 0.22666666666666668,
+        "mrr": 0.5355555555555556
+      },
+      "cases": [
+        {
+          "id": "dense-depth-monocular-endoscopy-q001",
+          "query": "What does the proposed method require for training and application, and what are its main reported strengths?",
+          "retrieved_element_ids": [
+            "element-000101",
+            "element-000006",
+            "element-000103",
+            "element-000018",
+            "element-000091"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000101"
+            ],
+            [
+              "element-000006"
+            ],
+            [
+              "element-000103"
+            ],
+            [
+              "element-000018"
+            ],
+            [
+              "element-000091"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q002",
+          "query": "Why do the authors argue that generic self-supervised depth methods based on image appearance are poorly suited to endoscopy?",
+          "retrieved_element_ids": [
+            "element-000026",
+            "element-000103",
+            "element-000025",
+            "element-000018",
+            "element-000006"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000026"
+            ],
+            [
+              "element-000103"
+            ],
+            [
+              "element-000025"
+            ],
+            [
+              "element-000018"
+            ],
+            [
+              "element-000006"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q003",
+          "query": "How are the sparse supervisory maps generated from an unlabeled endoscopy video according to Figure 2?",
+          "retrieved_element_ids": [
+            "element-000029",
+            "element-000033",
+            "element-000025",
+            "element-000079",
+            "element-000006"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000029"
+            ],
+            [
+              "element-000033"
+            ],
+            [
+              "element-000025"
+            ],
+            [
+              "element-000079"
+            ],
+            [
+              "element-000006"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q004",
+          "query": "How does the network architecture differ between training and deployment?",
+          "retrieved_element_ids": [
+            "element-000053",
+            "element-000030",
+            "element-000031",
+            "element-000029",
+            "element-000058",
+            "element-000027"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000053"
+            ],
+            [
+              "element-000030",
+              "element-000031"
+            ],
+            [
+              "element-000029"
+            ],
+            [
+              "element-000058"
+            ],
+            [
+              "element-000027"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q005",
+          "query": "What roles do Sparse Flow Loss and Depth Consistency Loss play in training?",
+          "retrieved_element_ids": [
+            "element-000029",
+            "element-000045",
+            "element-000067",
+            "element-000069",
+            "element-000062"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000029"
+            ],
+            [
+              "element-000045"
+            ],
+            [
+              "element-000067"
+            ],
+            [
+              "element-000069"
+            ],
+            [
+              "element-000062"
+            ]
+          ],
+          "recall": 0.6666666666666666,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.3333333333333333
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q006",
+          "query": "Why does the method use a soft mask for sparse SfM signals, and what does its weighting represent?",
+          "retrieved_element_ids": [
+            "element-000049",
+            "element-000082",
+            "element-000037",
+            "element-000038",
+            "element-000029",
+            "element-000079"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000049"
+            ],
+            [
+              "element-000082"
+            ],
+            [
+              "element-000037",
+              "element-000038"
+            ],
+            [
+              "element-000029"
+            ],
+            [
+              "element-000079"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q007",
+          "query": "What data were used in the experiments, and how was the leave-one-out patient evaluation organized?",
+          "retrieved_element_ids": [
+            "element-000086",
+            "element-000076",
+            "element-000088",
+            "element-000078",
+            "element-000077"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000086"
+            ],
+            [
+              "element-000076"
+            ],
+            [
+              "element-000088"
+            ],
+            [
+              "element-000078"
+            ],
+            [
+              "element-000077"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q008",
+          "query": "How sparse were the SfM labels, and what temporal separation was used when sampling frame pairs for training?",
+          "retrieved_element_ids": [
+            "element-000082",
+            "element-000049",
+            "element-000051",
+            "element-000035",
+            "element-000027"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000082"
+            ],
+            [
+              "element-000049"
+            ],
+            [
+              "element-000051"
+            ],
+            [
+              "element-000035"
+            ],
+            [
+              "element-000027"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q009",
+          "query": "What residual error did the cross-patient study report, and how did the authors contextualize it?",
+          "retrieved_element_ids": [
+            "element-000086",
+            "element-000094",
+            "element-000095",
+            "element-000093",
+            "element-000006",
+            "element-000103"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000086"
+            ],
+            [
+              "element-000094",
+              "element-000095"
+            ],
+            [
+              "element-000093"
+            ],
+            [
+              "element-000006"
+            ],
+            [
+              "element-000103"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q010",
+          "query": "How did the proposed method compare with Zhou et al. and Yin and Shi on CT-based residual error?",
+          "retrieved_element_ids": [
+            "element-000094",
+            "element-000095",
+            "element-000083",
+            "element-000084",
+            "element-000088",
+            "element-000096",
+            "element-000097",
+            "element-000101"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000094",
+              "element-000095"
+            ],
+            [
+              "element-000083",
+              "element-000084"
+            ],
+            [
+              "element-000088"
+            ],
+            [
+              "element-000096",
+              "element-000097"
+            ],
+            [
+              "element-000101"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.3333333333333333
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q011",
+          "query": "What does Figure 5 show about the reconstructions produced by the proposed method and the comparison methods?",
+          "retrieved_element_ids": [
+            "element-000083",
+            "element-000084",
+            "element-000088",
+            "element-000096",
+            "element-000097",
+            "element-000101",
+            "element-000024"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000083",
+              "element-000084"
+            ],
+            [
+              "element-000088"
+            ],
+            [
+              "element-000096",
+              "element-000097"
+            ],
+            [
+              "element-000101"
+            ],
+            [
+              "element-000024"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q012",
+          "query": "What did the ablation study find about adding Depth Consistency Loss to Sparse Flow Loss?",
+          "retrieved_element_ids": [
+            "element-000069",
+            "element-000067",
+            "element-000045",
+            "element-000062",
+            "element-000093"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000069"
+            ],
+            [
+              "element-000067"
+            ],
+            [
+              "element-000045"
+            ],
+            [
+              "element-000062"
+            ],
+            [
+              "element-000093"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.2
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q013",
+          "query": "What limitations follow from relying on SfM during training and predicting depth only up to a global scale?",
+          "retrieved_element_ids": [
+            "element-000036",
+            "element-000027",
+            "element-000101",
+            "element-000071",
+            "element-000079"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000036"
+            ],
+            [
+              "element-000027"
+            ],
+            [
+              "element-000101"
+            ],
+            [
+              "element-000071"
+            ],
+            [
+              "element-000079"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.3333333333333333
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q014",
+          "query": "What caveats do the authors give about interpreting their two depth-evaluation approaches?",
+          "retrieved_element_ids": [
+            "element-000088",
+            "element-000077",
+            "element-000101",
+            "element-000027",
+            "element-000026"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000088"
+            ],
+            [
+              "element-000077"
+            ],
+            [
+              "element-000101"
+            ],
+            [
+              "element-000027"
+            ],
+            [
+              "element-000026"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.3333333333333333
+        },
+        {
+          "id": "dense-depth-monocular-endoscopy-q015",
+          "query": "What future application do the authors identify for their single-frame depth predictions?",
+          "retrieved_element_ids": [
+            "element-000018",
+            "element-000026",
+            "element-000030",
+            "element-000031",
+            "element-000119",
+            "element-000101"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000018"
+            ],
+            [
+              "element-000026"
+            ],
+            [
+              "element-000030",
+              "element-000031"
+            ],
+            [
+              "element-000119"
+            ],
+            [
+              "element-000101"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        }
+      ]
+    },
+    {
+      "benchmark_file": "depth_benchmark.jsonl",
+      "source_pdf": "depth.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\depth.pdf",
+      "status": "ok",
+      "use_hyde": false,
+      "metrics": {
+        "case_count": 19,
+        "recall_at_k": 0.7066416040100251,
+        "precision_at_k": 0.2631578947368421,
+        "precision_returned": 0.2631578947368421,
+        "mrr": 0.6710526315789473
+      },
+      "cases": [
+        {
+          "id": "depth-q001",
+          "query": "What is the central goal of Depth Anything, and which two strategies does the paper use to exploit large-scale unlabeled data?",
+          "retrieved_element_ids": [
+            "element-000118",
+            "element-000007",
+            "element-000002",
+            "element-000004",
+            "element-000005",
+            "element-000012"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000118"
+            ],
+            [
+              "element-000007"
+            ],
+            [
+              "element-000002"
+            ],
+            [
+              "element-000004",
+              "element-000005"
+            ],
+            [
+              "element-000012"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "depth-q002",
+          "query": "How does the data engine combine labeled and unlabeled data for training?",
+          "retrieved_element_ids": [
+            "element-000070",
+            "element-000013",
+            "element-000019",
+            "element-000128",
+            "element-000027"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000070"
+            ],
+            [
+              "element-000013"
+            ],
+            [
+              "element-000019"
+            ],
+            [
+              "element-000128"
+            ],
+            [
+              "element-000027"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "depth-q003",
+          "query": "What teacher–student procedure is used to turn unlabeled images into training data?",
+          "retrieved_element_ids": [
+            "element-000070",
+            "element-000048",
+            "element-000099",
+            "element-000049",
+            "element-000014"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000070"
+            ],
+            [
+              "element-000048"
+            ],
+            [
+              "element-000099"
+            ],
+            [
+              "element-000049"
+            ],
+            [
+              "element-000014"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "depth-q004",
+          "query": "What are the overall labeled and unlabeled data volumes reported for Depth Anything?",
+          "retrieved_element_ids": [
+            "element-000029",
+            "element-000038",
+            "element-000002",
+            "element-000013",
+            "element-000042"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000029"
+            ],
+            [
+              "element-000038"
+            ],
+            [
+              "element-000002"
+            ],
+            [
+              "element-000013"
+            ],
+            [
+              "element-000042"
+            ]
+          ],
+          "recall": 0.6666666666666666,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "depth-q005",
+          "query": "Which perturbations are applied to unlabeled images, and how often is CutMix used?",
+          "retrieved_element_ids": [
+            "element-000049",
+            "element-000099",
+            "element-000056",
+            "element-000050",
+            "element-000014"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000049"
+            ],
+            [
+              "element-000099"
+            ],
+            [
+              "element-000056"
+            ],
+            [
+              "element-000050"
+            ],
+            [
+              "element-000014"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q006",
+          "query": "What information does Figure 2 convey about the Depth Anything pipeline?",
+          "retrieved_element_ids": [
+            "element-000045",
+            "element-000046",
+            "element-000004",
+            "element-000005",
+            "element-000029",
+            "element-000118",
+            "element-000079"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000045",
+              "element-000046"
+            ],
+            [
+              "element-000004",
+              "element-000005"
+            ],
+            [
+              "element-000029"
+            ],
+            [
+              "element-000118"
+            ],
+            [
+              "element-000079"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q007",
+          "query": "How does the semantic-assisted feature alignment work?",
+          "retrieved_element_ids": [
+            "element-000065",
+            "element-000064",
+            "element-000066",
+            "element-000060",
+            "element-000088"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000065"
+            ],
+            [
+              "element-000064"
+            ],
+            [
+              "element-000066"
+            ],
+            [
+              "element-000060"
+            ],
+            [
+              "element-000088"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.6,
+          "precision_returned": 0.6,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "depth-q008",
+          "query": "What are the main two-stage training settings reported in the implementation details?",
+          "retrieved_element_ids": [
+            "element-000070",
+            "element-000122",
+            "element-000124",
+            "element-000123",
+            "element-000059"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000070"
+            ],
+            [
+              "element-000122"
+            ],
+            [
+              "element-000124"
+            ],
+            [
+              "element-000123"
+            ],
+            [
+              "element-000059"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q009",
+          "query": "Which unseen datasets are used for zero-shot relative depth evaluation, and what improvement is reported on DDAD?",
+          "retrieved_element_ids": [
+            "element-000072",
+            "element-000073",
+            "element-000092",
+            "element-000061",
+            "element-000075"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000072"
+            ],
+            [
+              "element-000073"
+            ],
+            [
+              "element-000092"
+            ],
+            [
+              "element-000061"
+            ],
+            [
+              "element-000075"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q010",
+          "query": "How does the ViT-S variant compare with MiDaS in zero-shot relative depth estimation?",
+          "retrieved_element_ids": [
+            "element-000073",
+            "element-000061",
+            "element-000072",
+            "element-000077",
+            "element-000103"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000073"
+            ],
+            [
+              "element-000061"
+            ],
+            [
+              "element-000072"
+            ],
+            [
+              "element-000077"
+            ],
+            [
+              "element-000103"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q011",
+          "query": "What in-domain metric-depth gains does Depth Anything achieve after fine-tuning on NYUv2 and KITTI?",
+          "retrieved_element_ids": [
+            "element-000123",
+            "element-000077",
+            "element-000080",
+            "element-000082",
+            "element-000079"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000123"
+            ],
+            [
+              "element-000077"
+            ],
+            [
+              "element-000080"
+            ],
+            [
+              "element-000082"
+            ],
+            [
+              "element-000079"
+            ]
+          ],
+          "recall": 0.2,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.25
+        },
+        {
+          "id": "depth-q012",
+          "query": "How is the zero-shot metric-depth model constructed from ZoeDepth, and what is the reported comparison?",
+          "retrieved_element_ids": [
+            "element-000093",
+            "element-000084",
+            "element-000153",
+            "element-000021",
+            "element-000072"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000093"
+            ],
+            [
+              "element-000084"
+            ],
+            [
+              "element-000153"
+            ],
+            [
+              "element-000021"
+            ],
+            [
+              "element-000072"
+            ]
+          ],
+          "recall": 0.6666666666666666,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q013",
+          "query": "What semantic-segmentation transfer results support the claim that the encoder is useful beyond depth estimation?",
+          "retrieved_element_ids": [
+            "element-000089",
+            "element-000059",
+            "element-000060",
+            "element-000066",
+            "element-000058"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000089"
+            ],
+            [
+              "element-000059"
+            ],
+            [
+              "element-000060"
+            ],
+            [
+              "element-000066"
+            ],
+            [
+              "element-000058"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "depth-q014",
+          "query": "What do the ablations say about strong perturbations and the semantic constraint when learning from unlabeled images?",
+          "retrieved_element_ids": [
+            "element-000099",
+            "element-000106",
+            "element-000102",
+            "element-000045",
+            "element-000046",
+            "element-000049"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000099"
+            ],
+            [
+              "element-000106"
+            ],
+            [
+              "element-000102"
+            ],
+            [
+              "element-000045",
+              "element-000046"
+            ],
+            [
+              "element-000049"
+            ]
+          ],
+          "recall": 0.75,
+          "precision": 0.6,
+          "precision_returned": 0.6,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q015",
+          "query": "What does the tolerance-margin ablation show, and which α gives the best mean AbsRel among the tested values?",
+          "retrieved_element_ids": [
+            "element-000129",
+            "element-000127",
+            "element-000095",
+            "element-000108",
+            "element-000106"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000129"
+            ],
+            [
+              "element-000127"
+            ],
+            [
+              "element-000095"
+            ],
+            [
+              "element-000108"
+            ],
+            [
+              "element-000106"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q016",
+          "query": "What limitations and future scaling directions do the authors identify?",
+          "retrieved_element_ids": [
+            "element-000134",
+            "element-000189",
+            "element-000007",
+            "element-000017",
+            "element-000012"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000134"
+            ],
+            [
+              "element-000189"
+            ],
+            [
+              "element-000007"
+            ],
+            [
+              "element-000017"
+            ],
+            [
+              "element-000012"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q017",
+          "query": "What is the paper’s final conclusion about the role of unlabeled data and the resulting encoder?",
+          "retrieved_element_ids": [
+            "element-000045",
+            "element-000046",
+            "element-000070",
+            "element-000002",
+            "element-000050",
+            "element-000049"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000045",
+              "element-000046"
+            ],
+            [
+              "element-000070"
+            ],
+            [
+              "element-000002"
+            ],
+            [
+              "element-000050"
+            ],
+            [
+              "element-000049"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "depth-q018",
+          "query": "What does the qualitative comparison say about Depth Anything and depth-conditioned ControlNet?",
+          "retrieved_element_ids": [
+            "element-000116",
+            "element-000111",
+            "element-000112",
+            "element-000103",
+            "element-000007",
+            "element-000003"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000116"
+            ],
+            [
+              "element-000111",
+              "element-000112"
+            ],
+            [
+              "element-000103"
+            ],
+            [
+              "element-000007"
+            ],
+            [
+              "element-000003"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "depth-q019",
+          "query": "Which unseen datasets are shown in the supplementary qualitative Figures 5 through 10?",
+          "retrieved_element_ids": [
+            "element-000104",
+            "element-000105",
+            "element-000136",
+            "element-000116",
+            "element-000131",
+            "element-000092"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000104",
+              "element-000105"
+            ],
+            [
+              "element-000136"
+            ],
+            [
+              "element-000116"
+            ],
+            [
+              "element-000131"
+            ],
+            [
+              "element-000092"
+            ]
+          ],
+          "recall": 0.14285714285714285,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        }
+      ]
+    },
+    {
+      "benchmark_file": "fmisnet-4.jsonl",
+      "source_pdf": "FMISNet(4).pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\FMISNet(4).pdf",
+      "status": "ok",
+      "use_hyde": false,
+      "metrics": {
+        "case_count": 16,
+        "recall_at_k": 0.765625,
+        "precision_at_k": 0.21250000000000002,
+        "precision_returned": 0.21250000000000002,
+        "mrr": 0.734375
+      },
+      "cases": [
+        {
+          "id": "fmisnet-4-q001",
+          "query": "What are the four stages FMISNet uses to register an X-ray image against CT data?",
+          "retrieved_element_ids": [
+            "element-000018",
+            "element-000144",
+            "element-000044",
+            "element-000137",
+            "element-000133"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000018"
+            ],
+            [
+              "element-000144"
+            ],
+            [
+              "element-000044"
+            ],
+            [
+              "element-000137"
+            ],
+            [
+              "element-000133"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "fmisnet-4-q002",
+          "query": "How are the DRR images used for registration generated?",
+          "retrieved_element_ids": [
+            "element-000031",
+            "element-000137",
+            "element-000129",
+            "element-000133",
+            "element-000036"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000031"
+            ],
+            [
+              "element-000137"
+            ],
+            [
+              "element-000129"
+            ],
+            [
+              "element-000133"
+            ],
+            [
+              "element-000036"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q003",
+          "query": "How large was the blurry X-ray edge-extraction dataset after augmentation, and how was it split?",
+          "retrieved_element_ids": [
+            "element-000038",
+            "element-000039",
+            "element-000041",
+            "element-000028",
+            "element-000029",
+            "element-000027"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000038"
+            ],
+            [
+              "element-000039"
+            ],
+            [
+              "element-000041"
+            ],
+            [
+              "element-000028",
+              "element-000029"
+            ],
+            [
+              "element-000027"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q004",
+          "query": "What data pairs were used to train FMISNet for similarity calculation, and how many training sets resulted?",
+          "retrieved_element_ids": [
+            "element-000044",
+            "element-000054",
+            "element-000053",
+            "element-000133",
+            "element-000052"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000044"
+            ],
+            [
+              "element-000054"
+            ],
+            [
+              "element-000053"
+            ],
+            [
+              "element-000133"
+            ],
+            [
+              "element-000052"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q005",
+          "query": "What components and data flow does Figure 4 show for FMISNet?",
+          "retrieved_element_ids": [
+            "element-000052",
+            "element-000023",
+            "element-000055",
+            "element-000056",
+            "element-000013",
+            "element-000044"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000052"
+            ],
+            [
+              "element-000023"
+            ],
+            [
+              "element-000055",
+              "element-000056"
+            ],
+            [
+              "element-000013"
+            ],
+            [
+              "element-000044"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q006",
+          "query": "How was ECENet adapted to extract bone-edge features?",
+          "retrieved_element_ids": [
+            "element-000062",
+            "element-000061",
+            "element-000013",
+            "element-000060",
+            "element-000015"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000062"
+            ],
+            [
+              "element-000061"
+            ],
+            [
+              "element-000013"
+            ],
+            [
+              "element-000060"
+            ],
+            [
+              "element-000015"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "fmisnet-4-q007",
+          "query": "What does the SKSAM attention module do, and which attention types does it combine?",
+          "retrieved_element_ids": [
+            "element-000098",
+            "element-000065",
+            "element-000061",
+            "element-000097",
+            "element-000073"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000098"
+            ],
+            [
+              "element-000065"
+            ],
+            [
+              "element-000061"
+            ],
+            [
+              "element-000097"
+            ],
+            [
+              "element-000073"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "fmisnet-4-q008",
+          "query": "How does the context-aware fusion block improve ECENet?",
+          "retrieved_element_ids": [
+            "element-000061",
+            "element-000052",
+            "element-000015",
+            "element-000100",
+            "element-000133"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000061"
+            ],
+            [
+              "element-000052"
+            ],
+            [
+              "element-000015"
+            ],
+            [
+              "element-000100"
+            ],
+            [
+              "element-000133"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.25
+        },
+        {
+          "id": "fmisnet-4-q009",
+          "query": "How does the EFRH module turn edge features into an image-similarity estimate?",
+          "retrieved_element_ids": [
+            "element-000102",
+            "element-000104",
+            "element-000054",
+            "element-000013",
+            "element-000053"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000102"
+            ],
+            [
+              "element-000104"
+            ],
+            [
+              "element-000054"
+            ],
+            [
+              "element-000013"
+            ],
+            [
+              "element-000053"
+            ]
+          ],
+          "recall": 0.25,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "fmisnet-4-q010",
+          "query": "Why did the authors combine MSE and Jaccard loss in MSEJ?",
+          "retrieved_element_ids": [
+            "element-000124",
+            "element-000125",
+            "element-000122",
+            "element-000142",
+            "element-000121"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000124"
+            ],
+            [
+              "element-000125"
+            ],
+            [
+              "element-000122"
+            ],
+            [
+              "element-000142"
+            ],
+            [
+              "element-000121"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q011",
+          "query": "What optimizer and key hyperparameters were used to train FMISNet on the similarity-calculation dataset?",
+          "retrieved_element_ids": [
+            "element-000044",
+            "element-000129",
+            "element-000054",
+            "element-000053",
+            "element-000052"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000044"
+            ],
+            [
+              "element-000129"
+            ],
+            [
+              "element-000054"
+            ],
+            [
+              "element-000053"
+            ],
+            [
+              "element-000052"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "fmisnet-4-q012",
+          "query": "How did the authors define a successful registration and configure the registration trials?",
+          "retrieved_element_ids": [
+            "element-000144",
+            "element-000012",
+            "element-000018",
+            "element-000011",
+            "element-000003"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000144"
+            ],
+            [
+              "element-000012"
+            ],
+            [
+              "element-000018"
+            ],
+            [
+              "element-000011"
+            ],
+            [
+              "element-000003"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q013",
+          "query": "What registration success rates does Table 5 report for the proposed method and the MI baseline?",
+          "retrieved_element_ids": [
+            "element-000163",
+            "element-000162",
+            "element-000003",
+            "element-000018",
+            "element-000011"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000163"
+            ],
+            [
+              "element-000162"
+            ],
+            [
+              "element-000003"
+            ],
+            [
+              "element-000018"
+            ],
+            [
+              "element-000011"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q014",
+          "query": "How did ECENet compare with CHRNet on the reported ODS and OIS edge-detection scores?",
+          "retrieved_element_ids": [
+            "element-000167",
+            "element-000166",
+            "element-000060",
+            "element-000059",
+            "element-000133"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000167"
+            ],
+            [
+              "element-000166"
+            ],
+            [
+              "element-000060"
+            ],
+            [
+              "element-000059"
+            ],
+            [
+              "element-000133"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q015",
+          "query": "Which future research directions do the authors propose for improving FMISNet and expanding its applications?",
+          "retrieved_element_ids": [
+            "element-000180",
+            "element-000013",
+            "element-000052",
+            "element-000023",
+            "element-000133"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000180"
+            ],
+            [
+              "element-000013"
+            ],
+            [
+              "element-000052"
+            ],
+            [
+              "element-000023"
+            ],
+            [
+              "element-000133"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "fmisnet-4-q016",
+          "query": "What numerical evidence does the SKSAM ablation table provide for its ODS and OIS comparison?",
+          "retrieved_element_ids": [
+            "element-000173",
+            "element-000176",
+            "element-000167",
+            "element-000166",
+            "element-000146"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000173"
+            ],
+            [
+              "element-000176"
+            ],
+            [
+              "element-000167"
+            ],
+            [
+              "element-000166"
+            ],
+            [
+              "element-000146"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        }
+      ]
+    },
+    {
+      "benchmark_file": "ozyoruk2021.jsonl",
+      "source_pdf": "ozyoruk2021.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\ozyoruk2021.pdf",
+      "status": "ok",
+      "use_hyde": false,
+      "metrics": {
+        "case_count": 20,
+        "recall_at_k": 0.7930555555555555,
+        "precision_at_k": 0.3,
+        "precision_returned": 0.3,
+        "mrr": 0.7875
+      },
+      "cases": [
+        {
+          "id": "ozyoruk2021-q001",
+          "query": "What does the EndoSLAM dataset contain, and how many ex-vivo sub-datasets are provided for each organ group?",
+          "retrieved_element_ids": [
+            "element-000213",
+            "element-000070",
+            "element-000198",
+            "element-000041",
+            "element-000260",
+            "element-000261"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000213"
+            ],
+            [
+              "element-000070"
+            ],
+            [
+              "element-000198"
+            ],
+            [
+              "element-000041"
+            ],
+            [
+              "element-000260",
+              "element-000261"
+            ]
+          ],
+          "recall": 0.0,
+          "precision": 0.0,
+          "precision_returned": 0.0,
+          "reciprocal_rank": 0.0
+        },
+        {
+          "id": "ozyoruk2021-q002",
+          "query": "What design requirements does EndoSLAM target for endoscopic SLAM research?",
+          "retrieved_element_ids": [
+            "element-000041",
+            "element-000021",
+            "element-000011",
+            "element-000008",
+            "element-000012"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000041"
+            ],
+            [
+              "element-000021"
+            ],
+            [
+              "element-000011"
+            ],
+            [
+              "element-000008"
+            ],
+            [
+              "element-000012"
+            ]
+          ],
+          "recall": 0.1111111111111111,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q003",
+          "query": "How are the ex-vivo frames distributed across cameras, and how are pose coordinates represented?",
+          "retrieved_element_ids": [
+            "element-000080",
+            "element-000081",
+            "element-000070",
+            "element-000263",
+            "element-000264",
+            "element-000198",
+            "element-000021"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000080",
+              "element-000081"
+            ],
+            [
+              "element-000070"
+            ],
+            [
+              "element-000263",
+              "element-000264"
+            ],
+            [
+              "element-000198"
+            ],
+            [
+              "element-000021"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "ozyoruk2021-q004",
+          "query": "How is camera motion ground truth obtained in the EndoSLAM setup?",
+          "retrieved_element_ids": [
+            "element-000058",
+            "element-000068",
+            "element-000260",
+            "element-000261",
+            "element-000177",
+            "element-000169",
+            "element-000170"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000058"
+            ],
+            [
+              "element-000068"
+            ],
+            [
+              "element-000260",
+              "element-000261"
+            ],
+            [
+              "element-000177"
+            ],
+            [
+              "element-000169",
+              "element-000170"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "ozyoruk2021-q005",
+          "query": "What clinical-system validation experiment was added to EndoSLAM?",
+          "retrieved_element_ids": [
+            "element-000083",
+            "element-000015",
+            "element-000177",
+            "element-000129",
+            "element-000085"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000083"
+            ],
+            [
+              "element-000015"
+            ],
+            [
+              "element-000177"
+            ],
+            [
+              "element-000129"
+            ],
+            [
+              "element-000085"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q006",
+          "query": "Which image transformations are provided for robustness studies in the dataset?",
+          "retrieved_element_ids": [
+            "element-000079",
+            "element-000218",
+            "element-000182",
+            "element-000191",
+            "element-000192",
+            "element-000225"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000079"
+            ],
+            [
+              "element-000218"
+            ],
+            [
+              "element-000182"
+            ],
+            [
+              "element-000191",
+              "element-000192"
+            ],
+            [
+              "element-000225"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q007",
+          "query": "What synthetic data does EndoSLAM provide, and what annotations does it include?",
+          "retrieved_element_ids": [
+            "element-000085",
+            "element-000021",
+            "element-000260",
+            "element-000261",
+            "element-000179",
+            "element-000080",
+            "element-000081"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000085"
+            ],
+            [
+              "element-000021"
+            ],
+            [
+              "element-000260",
+              "element-000261"
+            ],
+            [
+              "element-000179"
+            ],
+            [
+              "element-000080",
+              "element-000081"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q008",
+          "query": "What problems does Endo-SfMLearner address in endoscopic monocular estimation, and how?",
+          "retrieved_element_ids": [
+            "element-000177",
+            "element-000088",
+            "element-000198",
+            "element-000114",
+            "element-000054"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000177"
+            ],
+            [
+              "element-000088"
+            ],
+            [
+              "element-000198"
+            ],
+            [
+              "element-000114"
+            ],
+            [
+              "element-000054"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "ozyoruk2021-q009",
+          "query": "What are the roles of DispNet and Attention PoseNet in Endo-SfMLearner?",
+          "retrieved_element_ids": [
+            "element-000095",
+            "element-000096",
+            "element-000099",
+            "element-000164",
+            "element-000165",
+            "element-000098"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000095"
+            ],
+            [
+              "element-000096"
+            ],
+            [
+              "element-000099"
+            ],
+            [
+              "element-000164",
+              "element-000165"
+            ],
+            [
+              "element-000098"
+            ]
+          ],
+          "recall": 0.6666666666666666,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q010",
+          "query": "How does the Endo-SfMLearner spatial attention block (ESAB) operate?",
+          "retrieved_element_ids": [
+            "element-000101",
+            "element-000109",
+            "element-000106",
+            "element-000104",
+            "element-000103"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000101"
+            ],
+            [
+              "element-000109"
+            ],
+            [
+              "element-000106"
+            ],
+            [
+              "element-000104"
+            ],
+            [
+              "element-000103"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.6,
+          "precision_returned": 0.6,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q011",
+          "query": "What losses make up the Endo-SfMLearner objective, and how is illumination handled?",
+          "retrieved_element_ids": [
+            "element-000114",
+            "element-000111",
+            "element-000120",
+            "element-000127",
+            "element-000164",
+            "element-000165"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000114"
+            ],
+            [
+              "element-000111"
+            ],
+            [
+              "element-000120"
+            ],
+            [
+              "element-000127"
+            ],
+            [
+              "element-000164",
+              "element-000165"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.6,
+          "precision_returned": 0.6,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q012",
+          "query": "How are ATE and relative pose error defined in the evaluation?",
+          "retrieved_element_ids": [
+            "element-000131",
+            "element-000156",
+            "element-000152",
+            "element-000159",
+            "element-000167"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000131"
+            ],
+            [
+              "element-000156"
+            ],
+            [
+              "element-000152"
+            ],
+            [
+              "element-000159"
+            ],
+            [
+              "element-000167"
+            ]
+          ],
+          "recall": 0.75,
+          "precision": 0.6,
+          "precision_returned": 0.6,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "ozyoruk2021-q013",
+          "query": "What training protocol was used for the pose-estimation comparison?",
+          "retrieved_element_ids": [
+            "element-000163",
+            "element-000188",
+            "element-000172",
+            "element-000035",
+            "element-000167"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000163"
+            ],
+            [
+              "element-000188"
+            ],
+            [
+              "element-000172"
+            ],
+            [
+              "element-000035"
+            ],
+            [
+              "element-000167"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q014",
+          "query": "What do the ablation results show about ESAB and the brightness-aware loss?",
+          "retrieved_element_ids": [
+            "element-000187",
+            "element-000185",
+            "element-000186",
+            "element-000189",
+            "element-000190",
+            "element-000167"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000187"
+            ],
+            [
+              "element-000185"
+            ],
+            [
+              "element-000186"
+            ],
+            [
+              "element-000189",
+              "element-000190"
+            ],
+            [
+              "element-000167"
+            ]
+          ],
+          "recall": 0.6666666666666666,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 0.25
+        },
+        {
+          "id": "ozyoruk2021-q015",
+          "query": "How does Endo-SfMLearner behave on sharp turns and fish-eye camera data in Figure 5?",
+          "retrieved_element_ids": [
+            "element-000169",
+            "element-000170",
+            "element-000189",
+            "element-000190",
+            "element-000198",
+            "element-000180",
+            "element-000181",
+            "element-000172"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000169",
+              "element-000170"
+            ],
+            [
+              "element-000189",
+              "element-000190"
+            ],
+            [
+              "element-000198"
+            ],
+            [
+              "element-000180",
+              "element-000181"
+            ],
+            [
+              "element-000172"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q016",
+          "query": "What quantitative depth-estimation results are reported across organs?",
+          "retrieved_element_ids": [
+            "element-000180",
+            "element-000181",
+            "element-000177",
+            "element-000036",
+            "element-000167",
+            "element-000037"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000180",
+              "element-000181"
+            ],
+            [
+              "element-000177"
+            ],
+            [
+              "element-000036"
+            ],
+            [
+              "element-000167"
+            ],
+            [
+              "element-000037"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q017",
+          "query": "What does the qualitative depth evaluation show about polyps, reflections, blur, and distortion?",
+          "retrieved_element_ids": [
+            "element-000182",
+            "element-000189",
+            "element-000190",
+            "element-000179",
+            "element-000180",
+            "element-000181",
+            "element-000079"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000182"
+            ],
+            [
+              "element-000189",
+              "element-000190"
+            ],
+            [
+              "element-000179"
+            ],
+            [
+              "element-000180",
+              "element-000181"
+            ],
+            [
+              "element-000079"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q018",
+          "query": "What is the 3D reconstruction pipeline and how accurate is it on the four evaluated trajectories?",
+          "retrieved_element_ids": [
+            "element-000196",
+            "element-000194",
+            "element-000138",
+            "element-000135",
+            "element-000143"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000196"
+            ],
+            [
+              "element-000194"
+            ],
+            [
+              "element-000138"
+            ],
+            [
+              "element-000135"
+            ],
+            [
+              "element-000143"
+            ]
+          ],
+          "recall": 0.6666666666666666,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ozyoruk2021-q019",
+          "query": "What limitations and future directions do the authors identify?",
+          "retrieved_element_ids": [
+            "element-000200",
+            "element-000198",
+            "element-000111",
+            "element-000039",
+            "element-000120"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000200"
+            ],
+            [
+              "element-000198"
+            ],
+            [
+              "element-000111"
+            ],
+            [
+              "element-000039"
+            ],
+            [
+              "element-000120"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "ozyoruk2021-q020",
+          "query": "What does the appendix report about pose estimation on synthetic Unity trajectories?",
+          "retrieved_element_ids": [
+            "element-000281",
+            "element-000282",
+            "element-000172",
+            "element-000169",
+            "element-000170",
+            "element-000131",
+            "element-000167"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000281",
+              "element-000282"
+            ],
+            [
+              "element-000172"
+            ],
+            [
+              "element-000169",
+              "element-000170"
+            ],
+            [
+              "element-000131"
+            ],
+            [
+              "element-000167"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        }
+      ]
+    },
+    {
+      "benchmark_file": "PHY2-4-e12893.jsonl",
+      "source_pdf": "PHY2-4-e12893.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\PHY2-4-e12893.pdf",
+      "status": "ok",
+      "use_hyde": false,
+      "metrics": {
+        "case_count": 15,
+        "recall_at_k": 0.7444444444444444,
+        "precision_at_k": 0.25333333333333335,
+        "precision_returned": 0.25333333333333335,
+        "mrr": 0.8633333333333333
+      },
+      "cases": [
+        {
+          "id": "10-14814-phy2-12893-q001",
+          "query": "What was the study's primary aim and hypothesis about lean body mass and protein dose?",
+          "retrieved_element_ids": [
+            "element-000029",
+            "element-000114",
+            "element-000023",
+            "element-000115",
+            "element-000116",
+            "element-000009"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000029"
+            ],
+            [
+              "element-000114"
+            ],
+            [
+              "element-000023"
+            ],
+            [
+              "element-000115",
+              "element-000116"
+            ],
+            [
+              "element-000009"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q002",
+          "query": "How were participants selected and divided into the lower- and higher-lean-body-mass groups?",
+          "retrieved_element_ids": [
+            "element-000033",
+            "element-000037",
+            "element-000104",
+            "element-000105",
+            "element-000115",
+            "element-000116",
+            "element-000045"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000033"
+            ],
+            [
+              "element-000037"
+            ],
+            [
+              "element-000104",
+              "element-000105"
+            ],
+            [
+              "element-000115",
+              "element-000116"
+            ],
+            [
+              "element-000045"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q003",
+          "query": "What was the randomized crossover intervention used to compare the two protein doses?",
+          "retrieved_element_ids": [
+            "element-000035",
+            "element-000029",
+            "element-000114",
+            "element-000090",
+            "element-000125"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000035"
+            ],
+            [
+              "element-000029"
+            ],
+            [
+              "element-000114"
+            ],
+            [
+              "element-000090"
+            ],
+            [
+              "element-000125"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q004",
+          "query": "How was the whole-body resistance exercise and post-exercise sampling protocol performed?",
+          "retrieved_element_ids": [
+            "element-000049",
+            "element-000118",
+            "element-000029",
+            "element-000114",
+            "element-000006"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000049"
+            ],
+            [
+              "element-000118"
+            ],
+            [
+              "element-000029"
+            ],
+            [
+              "element-000114"
+            ],
+            [
+              "element-000006"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q005",
+          "query": "Which participant characteristics differed significantly between the lower- and higher-LBM groups?",
+          "retrieved_element_ids": [
+            "element-000033",
+            "element-000030",
+            "element-000114",
+            "element-000038",
+            "element-000104",
+            "element-000105"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000033"
+            ],
+            [
+              "element-000030"
+            ],
+            [
+              "element-000114"
+            ],
+            [
+              "element-000038"
+            ],
+            [
+              "element-000104",
+              "element-000105"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.25
+        },
+        {
+          "id": "10-14814-phy2-12893-q006",
+          "query": "What does Figure 1 summarize about the infusion trial?",
+          "retrieved_element_ids": [
+            "element-000051",
+            "element-000052",
+            "element-000035",
+            "element-000041",
+            "element-000049",
+            "element-000043"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000051",
+              "element-000052"
+            ],
+            [
+              "element-000035"
+            ],
+            [
+              "element-000041"
+            ],
+            [
+              "element-000049"
+            ],
+            [
+              "element-000043"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q007",
+          "query": "How did the two protein doses affect plasma leucine concentrations?",
+          "retrieved_element_ids": [
+            "element-000076",
+            "element-000080",
+            "element-000081",
+            "element-000088",
+            "element-000090",
+            "element-000077"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000076"
+            ],
+            [
+              "element-000080",
+              "element-000081"
+            ],
+            [
+              "element-000088"
+            ],
+            [
+              "element-000090"
+            ],
+            [
+              "element-000077"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q008",
+          "query": "What did the intracellular amino-acid measurements show for the two doses?",
+          "retrieved_element_ids": [
+            "element-000082",
+            "element-000080",
+            "element-000081",
+            "element-000086",
+            "element-000077",
+            "element-000088"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000082"
+            ],
+            [
+              "element-000080",
+              "element-000081"
+            ],
+            [
+              "element-000086"
+            ],
+            [
+              "element-000077"
+            ],
+            [
+              "element-000088"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.2
+        },
+        {
+          "id": "10-14814-phy2-12893-q009",
+          "query": "How did protein dose affect phenylalanine oxidation and plasma urea?",
+          "retrieved_element_ids": [
+            "element-000095",
+            "element-000098",
+            "element-000099",
+            "element-000096",
+            "element-000100",
+            "element-000090"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000095"
+            ],
+            [
+              "element-000098",
+              "element-000099"
+            ],
+            [
+              "element-000096"
+            ],
+            [
+              "element-000100"
+            ],
+            [
+              "element-000090"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.6,
+          "precision_returned": 0.6,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q010",
+          "query": "How was myofibrillar fractional synthesis rate (FSR) calculated, and which precursor enrichment was used?",
+          "retrieved_element_ids": [
+            "element-000062",
+            "element-000090",
+            "element-000104",
+            "element-000105",
+            "element-000110",
+            "element-000106"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000062"
+            ],
+            [
+              "element-000090"
+            ],
+            [
+              "element-000104",
+              "element-000105"
+            ],
+            [
+              "element-000110"
+            ],
+            [
+              "element-000106"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q011",
+          "query": "What was the main finding for myofibrillar MPS when 40 g was compared with 20 g of protein?",
+          "retrieved_element_ids": [
+            "element-000023",
+            "element-000117",
+            "element-000110",
+            "element-000125",
+            "element-000114"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000023"
+            ],
+            [
+              "element-000117"
+            ],
+            [
+              "element-000110"
+            ],
+            [
+              "element-000125"
+            ],
+            [
+              "element-000114"
+            ]
+          ],
+          "recall": 0.6666666666666666,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q012",
+          "query": "Was the higher FSR with 40 g confined to an early part of recovery?",
+          "retrieved_element_ids": [
+            "element-000110",
+            "element-000104",
+            "element-000105",
+            "element-000114",
+            "element-000119",
+            "element-000023"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000110"
+            ],
+            [
+              "element-000104",
+              "element-000105"
+            ],
+            [
+              "element-000114"
+            ],
+            [
+              "element-000119"
+            ],
+            [
+              "element-000023"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q013",
+          "query": "How did p70S6K1 activity compare with the MPS response?",
+          "retrieved_element_ids": [
+            "element-000123",
+            "element-000124",
+            "element-000112",
+            "element-000060",
+            "element-000023"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000123"
+            ],
+            [
+              "element-000124"
+            ],
+            [
+              "element-000112"
+            ],
+            [
+              "element-000060"
+            ],
+            [
+              "element-000023"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.4,
+          "precision_returned": 0.4,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "10-14814-phy2-12893-q014",
+          "query": "What mechanism did the authors propose for why 40 g outperformed 20 g after whole-body exercise?",
+          "retrieved_element_ids": [
+            "element-000117",
+            "element-000118",
+            "element-000003",
+            "element-000119",
+            "element-000005"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000117"
+            ],
+            [
+              "element-000118"
+            ],
+            [
+              "element-000003"
+            ],
+            [
+              "element-000119"
+            ],
+            [
+              "element-000005"
+            ]
+          ],
+          "recall": 0.5,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 0.5
+        },
+        {
+          "id": "10-14814-phy2-12893-q015",
+          "query": "What limitations did the authors state about generalization and identifying a maximal protein dose?",
+          "retrieved_element_ids": [
+            "element-000125",
+            "element-000028",
+            "element-000122",
+            "element-000024",
+            "element-000119"
+          ],
+          "retrieved_element_groups": [
+            [
+              "element-000125"
+            ],
+            [
+              "element-000028"
+            ],
+            [
+              "element-000122"
+            ],
+            [
+              "element-000024"
+            ],
+            [
+              "element-000119"
+            ]
+          ],
+          "recall": 1.0,
+          "precision": 0.2,
+          "precision_returned": 0.2,
+          "reciprocal_rank": 1.0
+        }
+      ]
+    }
+  ]
+}
