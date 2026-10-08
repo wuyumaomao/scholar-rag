@@ -1,11 +1,13 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.pdf_parser import ParsedElement, ParsedPdf
 from app.routers import retrieval
 from app.retrieval_service import RetrievalService
+from app.routers.retrieval import RetrieveRequest
 
 
 class FakeEmbedder:
@@ -14,6 +16,20 @@ class FakeEmbedder:
 
     def embed_query(self, query: str) -> list[float]:
         return [1.0, 0.0]
+
+
+def test_retrieve_request_uses_similarity_threshold_default() -> None:
+    request = RetrieveRequest(file_id="file-1", query="question")
+
+    assert request.min_score == 0.8
+
+
+def test_retrieve_request_uses_shared_settings_defaults() -> None:
+    request = RetrieveRequest(file_id="file-1", query="question")
+
+    assert request.top_k == retrieval.settings.top_k
+    assert request.child_top_k == retrieval.settings.fetch_k
+    assert request.min_score == retrieval.settings.min_score
 
 
 def test_retrieve_endpoint_returns_parent_results_for_uploaded_pdf(
@@ -56,24 +72,22 @@ def test_retrieve_endpoint_returns_parent_results_for_uploaded_pdf(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "results": [
-            {
-                "chunk_id": "element-000001-parent",
-                "score": 1.0,
-                "context": "A useful result.",
-                "metadata": {
-                    "source_element_ids": ["element-000001"],
-                    "element_types": ["paragraph"],
-                    "page_nums": [1],
-                    "section_path": [],
-                    "related_element_ids": [],
-                    "orders": [1],
-                    "provenance": [],
-                    "image_path": "",
-                },
-            }
-        ]
+    results = response.json()["results"]
+    assert len(results) == 1
+    assert results[0] == {
+        "chunk_id": "element-000001-parent",
+        "score": pytest.approx(2 / 61),
+        "context": "A useful result.",
+        "metadata": {
+            "source_element_ids": ["element-000001"],
+            "element_types": ["paragraph"],
+            "page_nums": [1],
+            "section_path": [],
+            "related_element_ids": [],
+            "orders": [1],
+            "provenance": [],
+            "image_path": "",
+        },
     }
 
 

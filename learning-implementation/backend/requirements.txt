@@ -12,3 +12,4 @@ pymupdf>=1.24.0
 
 #安装驱动
 psycopg[binary]
+python-dotenv>=1.0

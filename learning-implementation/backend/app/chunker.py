@@ -40,6 +40,7 @@ def _section_prefix(element: ParsedElement) -> str:
 def _metadata_for(
     element: ParsedElement,
     excluded_related_ids: set[str] | None = None,
+    context_element_ids: list[str] | None = None,
 ) -> dict[str, object]:
     """Copy source and layout information into a JSON-friendly metadata map."""
     provenance = [
@@ -49,7 +50,7 @@ def _metadata_for(
     page_nums = list(dict.fromkeys(source.page_num for source in element.provenance))
     if not page_nums:
         page_nums = [element.page_num]
-    return {
+    metadata: dict[str, object] = {
         "source_element_ids": [element.element_id],
         "element_types": [element.element_type],
         "page_nums": page_nums,
@@ -63,6 +64,9 @@ def _metadata_for(
         "provenance": provenance,
         "image_path": element.image_path or "",
     }
+    if context_element_ids and context_element_ids != [element.element_id]:
+        metadata["context_element_ids"] = list(context_element_ids)
+    return metadata
 
 
 def _duplicate_table_caption_ids(elements: list[ParsedElement]) -> set[str]:
@@ -159,7 +163,20 @@ def create_chunks(
         parent_id = f"{element.element_id}-parent"
         prefix = _section_prefix(element)
         context = _context_for(element, elements_by_id)
-        meta = _metadata_for(element, duplicate_caption_ids)
+        context_element_ids = [element.element_id]
+        if element.element_type == "figure":
+            context_element_ids.extend(
+                related_id
+                for related_id in element.related_ids
+                if related_id in elements_by_id
+                and elements_by_id[related_id].element_type == "caption"
+                and elements_by_id[related_id].text.strip()
+            )
+        meta = _metadata_for(
+            element,
+            duplicate_caption_ids,
+            context_element_ids=context_element_ids,
+        )
         parents.append(Chunk(chunk_id=parent_id, context=context, meta=deepcopy(meta)))
 
         if element.element_type in _SPLITTABLE_TYPES and len(context) > chunk_size:

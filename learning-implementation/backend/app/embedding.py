@@ -2,14 +2,20 @@
 
 from typing import Any
 
-
-DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+from app.config import Settings
 
 
 class EmbeddingService:
     """Small adapter around Sentence Transformers for document and query text."""
 
-    def __init__(self, model_name: str = DEFAULT_EMBEDDING_MODEL, *, model: Any = None) -> None:
+    def __init__(
+        self,
+        model_name: str | None = None,
+        *,
+        model: Any = None,
+        settings: Settings | None = None,
+    ) -> None:
+        model_name = model_name or (settings or Settings.from_env()).embedding_model
         if not model_name.strip():
             raise ValueError("model_name 不能为空")
         self.model_name = model_name
