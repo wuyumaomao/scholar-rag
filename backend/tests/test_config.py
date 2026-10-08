@@ -10,6 +10,7 @@ def test_settings_read_model_and_retrieval_configuration_from_environment(monkey
     monkeypatch.setenv("RERANKER_ENABLED", "true")
     monkeypatch.setenv("RERANKER_MODEL", "custom-reranker")
     monkeypatch.setenv("RERANK_CANDIDATE_K", "12")
+    monkeypatch.setenv("BM25_WEIGHT", "1.75")
     monkeypatch.setenv("RRF_K", "42")
     monkeypatch.setenv("FETCH_K", "24")
     monkeypatch.setenv("TOP_K", "4")
@@ -25,6 +26,7 @@ def test_settings_read_model_and_retrieval_configuration_from_environment(monkey
     assert settings.reranker_enabled is True
     assert settings.reranker_model == "custom-reranker"
     assert settings.rerank_candidate_k == 12
+    assert settings.bm25_weight == 1.75
     assert settings.rrf_k == 42
     assert settings.fetch_k == 24
     assert settings.top_k == 4
@@ -41,6 +43,7 @@ def test_settings_use_safe_defaults_without_enabling_remote_services(monkeypatch
         "RERANKER_ENABLED",
         "RERANKER_MODEL",
         "RERANK_CANDIDATE_K",
+        "BM25_WEIGHT",
         "RRF_K",
         "FETCH_K",
         "TOP_K",
@@ -57,7 +60,8 @@ def test_settings_use_safe_defaults_without_enabling_remote_services(monkeypatch
     assert settings.embedding_model == "BAAI/bge-small-en-v1.5"
     assert settings.reranker_enabled is False
     assert settings.reranker_model == "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    assert settings.rerank_candidate_k == 10
+    assert settings.rerank_candidate_k == 20
+    assert settings.bm25_weight == 1.25
     assert settings.rrf_k == 60
     assert settings.fetch_k == 20
     assert settings.top_k == 5
@@ -72,6 +76,22 @@ def test_settings_reject_invalid_positive_integer(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="RRF_K"):
         Settings.from_env()
+
+
+def test_settings_require_endpoint_and_model_when_llm_is_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+
+    with pytest.raises(ValueError, match="LLM_BASE_URL"):
+        Settings.from_env(load_dotenv_file=False)
+
+
+def test_settings_reject_non_positive_bm25_weight(monkeypatch) -> None:
+    monkeypatch.setenv("BM25_WEIGHT", "0")
+
+    with pytest.raises(ValueError, match="BM25_WEIGHT"):
+        Settings.from_env(load_dotenv_file=False)
 
 
 def test_settings_load_backend_dotenv_file(monkeypatch, tmp_path) -> None:

@@ -22,6 +22,54 @@ def test_retrieve_request_uses_similarity_threshold_default() -> None:
     request = RetrieveRequest(file_id="file-1", query="question")
 
     assert request.min_score == 0.8
+    assert request.use_hyde is False
+
+
+def test_retrieve_endpoint_passes_hyde_flag_to_service(monkeypatch, tmp_path: Path) -> None:
+    pdf_path = tmp_path / "file-1.pdf"
+    pdf_path.write_bytes(b"pdf")
+    monkeypatch.setattr(retrieval, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(retrieval, "get_file", lambda _file_id: {"file_id": "file-1"})
+    captured: dict[str, object] = {}
+
+    class Service:
+        def retrieve(self, *args, **kwargs):
+            captured.update(kwargs)
+            return []
+
+    monkeypatch.setattr(retrieval, "retrieval_service", Service())
+    response = TestClient(app).post(
+        "/api/retrieve",
+        json={"file_id": "file-1", "query": "question", "use_hyde": True},
+    )
+
+    assert response.status_code == 200
+    assert captured["use_hyde"] is True
+
+
+def test_retrieve_endpoint_returns_clear_error_when_hyde_is_unconfigured(
+    monkeypatch, tmp_path: Path
+) -> None:
+    pdf_path = tmp_path / "file-1.pdf"
+    pdf_path.write_bytes(b"pdf")
+    monkeypatch.setattr(retrieval, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(retrieval, "get_file", lambda _file_id: {"file_id": "file-1"})
+    monkeypatch.setattr(
+        retrieval,
+        "retrieval_service",
+        RetrievalService(
+            embedder=FakeEmbedder(),
+            parser=lambda path, *, figure_dir: ParsedPdf(page_count=1, elements=[]),
+        ),
+    )
+
+    response = TestClient(app).post(
+        "/api/retrieve",
+        json={"file_id": "file-1", "query": "question", "use_hyde": True},
+    )
+
+    assert response.status_code == 422
+    assert "LLM_ENABLED=true" in response.json()["detail"]
 
 
 def test_retrieve_request_uses_shared_settings_defaults() -> None:
@@ -76,7 +124,7 @@ def test_retrieve_endpoint_returns_parent_results_for_uploaded_pdf(
     assert len(results) == 1
     assert results[0] == {
         "chunk_id": "element-000001-parent",
-        "score": pytest.approx(2 / 61),
+        "score": pytest.approx((1 + 1.25) / 61),
         "context": "A useful result.",
         "metadata": {
             "source_element_ids": ["element-000001"],

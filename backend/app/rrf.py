@@ -27,34 +27,40 @@ def fuse_parent_hits(
     *,
     top_k: int = 10,
     rrf_k: int = 60,
+    bm25_weight: float = 1.0,
 ) -> list[RetrievalHit]:
     """Fuse dense and BM25 child rankings into unique parent hits with RRF.
 
-    Each channel contributes at most one rank per parent. The returned score is
-    the sum of ``1 / (rrf_k + rank)`` for the channels containing that parent.
+    Each channel contributes at most one rank per parent. Dense contributes
+    ``1 / (rrf_k + rank)`` and BM25 contributes the same value multiplied by
+    ``bm25_weight``.
     """
     if top_k <= 0:
         raise ValueError("top_k 必须大于 0")
     if rrf_k <= 0:
         raise ValueError("rrf_k 必须大于 0")
+    if bm25_weight <= 0:
+        raise ValueError("bm25_weight 必须大于 0")
 
     parents_by_id = {parent.chunk_id: parent for parent in parents}
     channel_ranks = [
-        _best_parent_ranks(dense_hits, parents_by_id),
-        _best_parent_ranks(bm25_hits, parents_by_id),
+        (_best_parent_ranks(dense_hits, parents_by_id), 1.0),
+        (_best_parent_ranks(bm25_hits, parents_by_id), bm25_weight),
     ]
 
     scores: dict[str, float] = {}
     result_chunks: dict[str, Chunk] = {}
     first_seen_order: dict[str, int] = {}
     order = 0
-    for ranks in channel_ranks:
+    for ranks, weight in channel_ranks:
         for parent_id, (rank, parent) in ranks.items():
             if parent_id not in first_seen_order:
                 first_seen_order[parent_id] = order
                 order += 1
             result_chunks[parent_id] = parent
-            scores[parent_id] = scores.get(parent_id, 0.0) + 1 / (rrf_k + rank)
+            scores[parent_id] = (
+                scores.get(parent_id, 0.0) + weight / (rrf_k + rank)
+            )
 
     ranked_parent_ids = sorted(
         scores,

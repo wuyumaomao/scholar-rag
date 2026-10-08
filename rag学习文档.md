@@ -634,10 +634,10 @@ Dense 和 BM25 都返回 child，但同一个 parent 可能包含多个 child。
 
 ```text
 RRF(parent) = 1 / (rrf_k + dense_rank)
-            + 1 / (rrf_k + bm25_rank)
+            + bm25_weight / (rrf_k + bm25_rank)
 ```
 
-学习版的 `fuse_parent_hits()` 默认使用 `rrf_k=60`，输入 Dense 和 BM25 的 child 命中以及 parent 列表，输出去重后的 parent 命中。某个 parent 只在一个通道出现时只获得一项分数；两个通道都出现时会累加两项分数。默认可以先取 `top_k=10`，再交给 Cross-Encoder 做精排。
+学习版的 `fuse_parent_hits()` 默认使用 `rrf_k=60`，输入 Dense 和 BM25 的 child 命中以及 parent 列表，输出去重后的 parent 命中。某个 parent 只在一个通道出现时只获得一项分数；两个通道都出现时会累加两项分数。当前应用配置 `BM25_WEIGHT=1.25`，表示 BM25 的排名贡献乘以 1.25；它仍然是排名融合，不是把原始 BM25 分数与 Dense 分数相加。默认可以先取 `top_k=10`，再交给 Cross-Encoder 做精排。
 
 #### 本地检索 API
 
@@ -686,7 +686,7 @@ Precision@returned 实际返回的结果中命中的结果数 / 实际返回结�
 MRR         Top-k 内第一个命中 gold 的排名倒数，再对所有问题取平均
 ```
 
-评测脚本支持 `--retrieval-mode dense`、`hybrid` 和 `hybrid-rerank`。第三种模式先用 Dense + BM25 + RRF 选出 parent 候选，再用 Cross-Encoder 对候选逐个评分、重新排序，最终只返回前 `k` 个。默认候选数由 `RERANK_CANDIDATE_K=10` 控制；模型由 `RERANKER_MODEL` 指定，学习版默认使用较小的英文模型 `cross-encoder/ms-marco-MiniLM-L-6-v2`。为了公平比较，模式之间使用相同 benchmark、PDF、`k`、child 候选数和 `min_score`。Dense 模式保留旧基线；Hybrid 的 `RRF_K` 默认从配置读取。例如，对 7 篇论文、116 个问题运行三组对照：
+评测脚本支持 `--retrieval-mode dense`、`hybrid` 和 `hybrid-rerank`。第三种模式先用 Dense + BM25 + RRF 选出 parent 候选，再用 Cross-Encoder 对候选逐个评分、重新排序，最终只返回前 `k` 个。默认候选数由 `RERANK_CANDIDATE_K=20` 控制；BM25 的 RRF 权重默认是 `BM25_WEIGHT=1.25`。模型由 `RERANKER_MODEL` 指定，学习版默认使用较小的英文模型 `cross-encoder/ms-marco-MiniLM-L-6-v2`。为了公平比较，模式之间使用相同 benchmark、PDF、`k`、child 候选数和 `min_score`。Dense 模式保留旧基线；Hybrid 的 `RRF_K` 默认从配置读取。例如，对 7 篇论文、116 个问题运行三组对照：
 
 ```cmd
 cd learning-implementation\backend
@@ -716,6 +716,91 @@ cd learning-implementation\backend
 | MRR | 0.5289 | 0.6467 | 0.7228 |
 
 这批数据上 Hybrid 的四项指标都高于 Dense，Cross-Encoder 重排后继续提升了四项指标，说明它改善了已经召回的 parent 候选顺序。它不能找回没有进入 RRF 候选池的 parent。当前 benchmark 以正向可回答问题为主，且 BM25 使用简单英文词元化；这些结果适合用作学习项目的阶段性对照，不代表不可答问题上的拒答能力。
+
+#### HyDE：为 Dense 检索生成假设段落
+
+HyDE（Hypothetical Document Embeddings）先让 LLM 根据问题写一段“看起来像论文证据”的假设文本，再把这段文本送入 embedding 模型。它的目的，是让短问题转换成更接近论文正文的语义表达；假设段落本身不是证据，也不会直接返回给用户。
+
+学习版默认关闭 HyDE。启用时，Dense 使用生成的段落计算 query vector；BM25 和 Cross-Encoder 仍接收原始问题，以保留词面检索和问题相关性判断。配置 `LLM_ENABLED=true`、`LLM_BASE_URL` 和 `LLM_MODEL` 后，可通过检索 API 单次启用：
+
+```cmd
+curl.exe -X POST "http://127.0.0.1:8100/api/retrieve" -H "Content-Type: application/json" -d "{\"file_id\":\"替换为上传响应中的file_id\",\"query\":\"What does Figure 5 show about the depth estimation architecture?\",\"use_hyde\":true}"
+```
+
+运行 benchmark 时添加 `--use-hyde`，其余参数和不启用时保持一致，才能比较指标变化：
+
+```cmd
+..\.venv\Scripts\python.exe scripts\evaluate_benchmark.py --retrieval-mode hybrid-rerank --use-hyde --pdf-dir C:\Users\93655\Desktop\paper --k 5 --child-top-k 20 --min-score 0.7 --rrf-k 60 --rerank-candidate-k 10 --output ..\evaluation-results-hybrid-rerank-hyde.json
+```
+
+评测报告根级和每个数据集记录 `use_hyde`。如果显式开启但没有 LLM 配置，程序会报出需要补充的设置；如果远程生成请求失败，则记录 warning 并对该问题改用原始 query，评测仍可继续。启用 HyDE 会增加一次远程 LLM 请求及其延迟/费用，因此应在同一 benchmark 上对照 `use_hyde=false` 和 `true`，再决定是否保留。
+
+2026-10-08 使用 `deepseek-flash` 对 7 篇论文、116 个问题做了同参数对照，检索器均为 `hybrid-rerank`，`k=5`、`child_top_k=20`、`min_score=0.7`、`rrf_k=60`、rerank 候选数 10，reranker 固定为本地 `cross-encoder/ms-marco-MiniLM-L-6-v2`：
+
+| 指标 | 原始 query | HyDE | 变化 |
+|---|---:|---:|---:|
+| Recall@5 | 0.7762 | 0.7575 | -0.0187 |
+| Precision@5 | 0.2397 | 0.2328 | -0.0069 |
+| Precision@returned | 0.2397 | 0.2328 | -0.0069 |
+| MRR | 0.7228 | 0.7277 | +0.0049 |
+
+当前结果没有显示 HyDE 带来整体提升：Recall 和 Precision 略降，MRR 小幅上升。还要考虑模型有 25/116 次返回空文本，系统按设计回退到原问题；所以这次评测中约 21.6% 的问题并未真正使用 HyDE，结论只适用于当前模型、服务稳定性和 benchmark。两份逐题报告分别为 `evaluation-results-hyde-baseline.json` 和 `evaluation-results-hyde-deepseek-flash.json`。
+
+#### 拆解 Dense、BM25、RRF 与重排的召回率
+
+为了区分“候选阶段没召回”与“最终 Top K 截断”，对同一批 116 个问题统计各阶段的 evidence Recall。Dense/BM25 各取最多 20 个 child；Dense 使用 `min_score=0.7`；随后 parent 级 RRF 取 10 个候选，再由 Cross-Encoder 重排。Recall 按 gold Docling element 计算；child 命中后映射到它对应的 parent context，避免把同一个 parent 的多个 child 重复计算。
+
+| 阶段 | Recall |
+|---|---:|
+| Dense Top 20 child（映射 parent context） | 0.7384 |
+| BM25 Top 20 child（映射 parent context） | 0.8575 |
+| RRF Top 10 parent 候选 | 0.8275 |
+| Cross-Encoder 重排后 Top 10 | 0.8275 |
+| RRF 排序直接截取 Top 5（未重排） | 0.7151 |
+| Cross-Encoder 重排后 Top 5 | 0.7762 |
+| RRF 排序直接截取 Top 3（未重排） | 0.5690 |
+| Cross-Encoder 重排后 Top 3 | 0.6890 |
+| Cross-Encoder 重排后 Top 2 | 0.6121 |
+
+这说明候选召回总体较高，但 Dense Top 20 本身还有约四分之一的 gold element 没进入候选。RRF Top 10 的召回上限为 0.8275；重排不会增加候选，只改变顺序，所以 Top 10 的 Recall 不变。若用较小的 Top K，覆盖会下降；但在相同 K 下，当前 Cross-Encoder 把更多相关 parent 排到前面：@3 从 0.5690 提到 0.6890，@5 从 0.7151 提到 0.7762。因此，不能把 Top 3 比 Top 5 的差异归因于 reranker 伤害 Recall；主要是最终上下文数量减少，reranker 实际上缓解了这部分损失。
+
+Dense Top 20 因 `min_score=0.7` 平均实际返回 15.87 个 child（约 13.53 个不同 parent）；BM25 平均返回 20 个 child（约 16.32 个不同 parent）。这些是当前 benchmark 和参数下的宏平均，不能直接当作其他语料或查询的召回保证。
+
+#### BM25 权重与 rerank 候选数对照
+
+为了验证是否应该提高 BM25 在 RRF 中的影响，并增加 Cross-Encoder 的重排候选数，在同一批 7 篇论文、116 个问题上做了参数 sweep。固定 `dense_weight=1`、`rrf_k=60`、`child_top_k=20`、`min_score=0.7`，比较 `bm25_weight=1.0/1.25/1.5/2.0`、`rerank_candidate_k=10/15/20`，最终分别观察 Top 3 和 Top 5。RRF 的加权分数为：
+
+```text
+score(parent) = dense_weight / (rrf_k + dense_rank)
+              + bm25_weight / (rrf_k + bm25_rank)
+```
+
+这里提高 BM25 权重，是放大 BM25 排名在 RRF 中的贡献；不是把原始 BM25 分数和向量分数直接相加。候选数表示进入 Cross-Encoder 的 parent 数量。完整汇总如下：
+
+| BM25 权重 | rerank 候选数 | Recall@3 | Precision@3 | MRR@3 | Recall@5 | Precision@5 | MRR@5 |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1.00 | 10 | 0.6890 | 0.3420 | 0.7069 | 0.7762 | 0.2397 | 0.7228 |
+| 1.00 | 15 | 0.6933 | 0.3448 | 0.7069 | 0.7776 | 0.2397 | 0.7211 |
+| 1.00 | 20 | 0.6890 | 0.3420 | 0.7055 | 0.7819 | 0.2397 | 0.7218 |
+| 1.25 | 10 | 0.6760 | 0.3362 | 0.6954 | 0.7518 | 0.2328 | 0.7088 |
+| 1.25 | 15 | 0.6890 | 0.3420 | 0.7040 | 0.7791 | 0.2379 | 0.7191 |
+| 1.25 | 20 | 0.6933 | 0.3448 | 0.7069 | 0.7862 | 0.2414 | 0.7233 |
+| 1.50 | 10 | 0.6760 | 0.3362 | 0.6954 | 0.7518 | 0.2328 | 0.7088 |
+| 1.50 | 15 | 0.6804 | 0.3391 | 0.6954 | 0.7618 | 0.2345 | 0.7088 |
+| 1.50 | 20 | 0.6933 | 0.3448 | 0.7069 | 0.7862 | 0.2414 | 0.7233 |
+| 2.00 | 10 | 0.6760 | 0.3362 | 0.6954 | 0.7518 | 0.2328 | 0.7088 |
+| 2.00 | 15 | 0.6804 | 0.3391 | 0.6954 | 0.7618 | 0.2345 | 0.7088 |
+| 2.00 | 20 | 0.6933 | 0.3448 | 0.7069 | 0.7862 | 0.2414 | 0.7233 |
+
+在本轮参数里，最好的 Top 5 是 `bm25_weight=1.25, rerank_candidate_k=20`：Recall@5=`0.7862`、Precision@5=`0.2414`、MRR=`0.7233`。与原来的 `1.0/10` 对照相比，三项分别增加 `0.0100/0.0017/0.0005`；Top 3 Recall 只从 `0.6890` 到 `0.6933`。更高的权重 `1.5/2.0` 没有超过 `1.25`，而在候选数只有 10 时，提高 BM25 权重反而使指标下降。用户确认采用 `1.25/20` 作为学习版默认配置。
+
+随后把这两个值接入 `Settings`、主检索服务和 benchmark CLI，并用本地 Cross-Encoder 对 116 个问题重新运行。结果复现了 sweep：Recall@5=`0.7862`、Precision@5=`0.2414`、Precision@returned=`0.2414`、MRR=`0.7233`。逐题报告为 `evaluation-results-hybrid-rerank-bm25-1.25-candidate20.json`。`RERANKER_ENABLED` 仍是独立开关，默认关闭；只有启用它时，候选数 20 才会在 API 主流程中触发模型重排。benchmark 的 `hybrid-rerank` 模式会实际运行 reranker。benchmark 以正向可回答问题为主，且 BM25 词元化仍较简单，结果不代表拒答或其他语料表现。
+
+#### Reranker 不只有一种模型
+
+当前学习版用 `CrossEncoderReranker` 包装了一个模型：`cross-encoder/ms-marco-MiniLM-L-6-v2`。它通过 `RERANKER_MODEL` 配置，代码实际调用 `sentence_transformers.CrossEncoder`，所以可以换成兼容的 Cross-Encoder 模型；换模型后要在同一 benchmark 上重跑，不能只看模型名称或参数规模判断优劣。
+
+除了换模型，rerank 还可以从几个方面优化：扩大或缩小候选数（当前默认 20；从 10 增至 20 会多计算一倍左右的 query-parent 配对，延迟尚未单独测量）；改善送入模型的 query 与 parent 文本，例如确认标题/章节路径是否作为上下文；检查模型输入长度截断是否丢掉关键证据；比较更强模型的 Recall、Precision、MRR 和运行耗时。当前实现已经支持候选数和模型名配置，尚未实现可配置的输入模板、最大长度或模型微调。Reranker 分数是相关性排序分数，不是概率；候选池之外的内容也无法被它找回来。
 
 #### 阈值和 top_k 对照
 
@@ -764,6 +849,7 @@ EMBEDDING_MODEL       向量模型
 RERANKER_ENABLED      是否启用模型重排
 RERANKER_MODEL        重排模型
 RERANK_CANDIDATE_K    RRF 后交给重排模型的 parent 候选数
+BM25_WEIGHT           BM25 排名在 RRF 中的权重（默认 1.25）
 FETCH_K               每个检索通道先保留的候选数量
 TOP_K                 最终返回的 parent 数量上限
 MIN_SCORE             Dense 余弦相似度最低阈值

@@ -45,9 +45,35 @@ def test_rrf_limits_final_parent_results() -> None:
     assert len(results) == 1
 
 
+def test_rrf_weight_can_increase_bm25_influence() -> None:
+    parents = [make_chunk("parent-a"), make_chunk("parent-b")]
+    dense_hits = [
+        RetrievalHit(make_chunk("a-child", "parent-a"), 0.9),
+        RetrievalHit(make_chunk("b-child", "parent-b"), 0.8),
+    ]
+    bm25_hits = [
+        RetrievalHit(make_chunk("b-child", "parent-b"), 3.0),
+        RetrievalHit(make_chunk("a-child", "parent-a"), 2.0),
+    ]
+
+    results = fuse_parent_hits(
+        dense_hits,
+        bm25_hits,
+        parents,
+        top_k=2,
+        rrf_k=1,
+        bm25_weight=1.25,
+    )
+
+    assert [hit.chunk.chunk_id for hit in results] == ["parent-b", "parent-a"]
+    assert results[0].score == pytest.approx(1 / 3 + 1.25 / 2)
+
+
 def test_rrf_rejects_invalid_parameters() -> None:
     parents = [make_chunk("parent-a")]
     with pytest.raises(ValueError, match="top_k"):
         fuse_parent_hits([], [], parents, top_k=0)
     with pytest.raises(ValueError, match="rrf_k"):
         fuse_parent_hits([], [], parents, rrf_k=0)
+    with pytest.raises(ValueError, match="bm25_weight"):
+        fuse_parent_hits([], [], parents, bm25_weight=0)

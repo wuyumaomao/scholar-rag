@@ -30,6 +30,7 @@ class RetrieveRequest(BaseModel):
     top_k: int = Field(default=settings.top_k, ge=1, le=50)
     child_top_k: int = Field(default=settings.fetch_k, ge=1, le=200)
     min_score: float = Field(default=settings.min_score, ge=-1, le=1)
+    use_hyde: bool = False
 
     @field_validator("query")
     @classmethod
@@ -60,6 +61,7 @@ async def retrieve(request: RetrieveRequest) -> dict[str, list[dict[str, object]
             top_k=request.top_k,
             child_top_k=request.child_top_k,
             min_score=request.min_score,
+            use_hyde=request.use_hyde,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

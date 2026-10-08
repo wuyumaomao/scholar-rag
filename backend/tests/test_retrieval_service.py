@@ -6,6 +6,8 @@ from app.chunker import Chunk
 from app.config import Settings
 from app.pdf_parser import ParsedElement, ParsedPdf, ParsedProvenance
 from app.retrieval_service import RetrievalService
+from app import retrieval_service as retrieval_service_module
+from app.hyde import HyDEError
 
 
 class FakeEmbedder:
@@ -42,6 +44,37 @@ class HybridRankingEmbedder:
 
     def embed_query(self, query: str) -> list[float]:
         return [1.0, 0.0]
+
+
+class RecordingEmbedder(FakeEmbedder):
+    def __init__(self) -> None:
+        super().__init__()
+        self.queries: list[str] = []
+
+    def embed_query(self, query: str) -> list[float]:
+        self.queries.append(query)
+        return [1.0, 0.0]
+
+
+class FakeHyDEGenerator:
+    def __init__(self, passage: str = "hypothetical paper passage") -> None:
+        self.passage = passage
+        self.queries: list[str] = []
+
+    def generate(self, query: str) -> str:
+        self.queries.append(query)
+        if isinstance(self.passage, Exception):
+            raise self.passage
+        return self.passage
+
+
+class RecordingReranker:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def rerank(self, query, candidates, *, top_k):
+        self.queries.append(query)
+        return list(candidates)[:top_k]
 
 
 def parsed_pdf() -> ParsedPdf:
@@ -84,7 +117,7 @@ def test_retrieval_service_returns_parent_context_and_caches_document_index(
     assert first[0].chunk.chunk_id == "element-000001-parent"
     assert first[0].chunk.context.endswith("The architecture uses a convolutional network.")
     assert first[0].chunk.meta["page_nums"] == [1]
-    assert first[0].score == pytest.approx(2 / 61)
+    assert first[0].score == pytest.approx((1 + 1.25) / 61)
     assert second == first
     assert parsed_calls == [(pdf_path, tmp_path / "figures")]
     assert embedder.document_calls == 1
@@ -135,9 +168,9 @@ def test_retrieval_service_applies_similarity_threshold(tmp_path: Path) -> None:
     # BM25 can retrieve the parent even when Dense filters it out; lowering the
     # Dense threshold adds a second RRF vote for that same parent.
     assert len(strict_threshold_hits) == 1
-    assert strict_threshold_hits[0].score == pytest.approx(1 / 61)
+    assert strict_threshold_hits[0].score == pytest.approx(1.25 / 61)
     assert len(permissive_threshold_hits) == 1
-    assert permissive_threshold_hits[0].score == pytest.approx(2 / 61)
+    assert permissive_threshold_hits[0].score == pytest.approx((1 + 1.25) / 61)
 
 
 def test_retrieval_service_uses_settings_for_omitted_search_defaults(tmp_path: Path) -> None:
@@ -150,6 +183,99 @@ def test_retrieval_service_uses_settings_for_omitted_search_defaults(tmp_path: P
     )
 
     assert len(service.retrieve("file-1", pdf_path, "architecture", tmp_path / "figures")) == 1
+
+
+def test_hyde_uses_generated_passage_for_dense_and_original_query_for_bm25_and_rerank(
+    monkeypatch, tmp_path: Path
+) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"pdf")
+    bm25_queries: list[str] = []
+
+    class RecordingBM25:
+        def __init__(self, chunks) -> None:
+            self.chunks = chunks
+
+        def search(self, query: str, *, top_k: int):
+            bm25_queries.append(query)
+            return []
+
+    monkeypatch.setattr(retrieval_service_module, "BM25Retriever", RecordingBM25)
+    embedder = RecordingEmbedder()
+    hyde = FakeHyDEGenerator()
+    reranker = RecordingReranker()
+    service = RetrievalService(
+        embedder=embedder,
+        parser=lambda path, *, figure_dir: parsed_pdf(),
+        hyde_generator=hyde,
+        reranker=reranker,
+        settings=Settings(
+            llm_enabled=True,
+            llm_base_url="https://llm.example/v1",
+            llm_model="paper-model",
+            rerank_candidate_k=3,
+            vlm_enabled=False,
+        ),
+    )
+
+    service.retrieve(
+        "file-1",
+        pdf_path,
+        "original user question",
+        tmp_path / "figures",
+        use_hyde=True,
+    )
+
+    assert hyde.queries == ["original user question"]
+    assert embedder.queries == ["hypothetical paper passage"]
+    assert bm25_queries == ["original user question"]
+    assert reranker.queries == ["original user question"]
+
+
+def test_hyde_request_requires_llm_configuration(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"pdf")
+    hyde = FakeHyDEGenerator()
+    service = RetrievalService(
+        embedder=FakeEmbedder(),
+        parser=lambda path, *, figure_dir: parsed_pdf(),
+        hyde_generator=hyde,
+        settings=Settings(vlm_enabled=False),
+    )
+
+    with pytest.raises(ValueError, match="LLM_ENABLED"):
+        service.retrieve(
+            "file-1",
+            pdf_path,
+            "question",
+            tmp_path / "figures",
+            use_hyde=True,
+        )
+
+    assert hyde.queries == []
+
+
+def test_hyde_model_failure_falls_back_to_original_query(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"pdf")
+    embedder = RecordingEmbedder()
+    service = RetrievalService(
+        embedder=embedder,
+        parser=lambda path, *, figure_dir: parsed_pdf(),
+        hyde_generator=FakeHyDEGenerator(HyDEError("request failed")),
+        settings=Settings(
+            llm_enabled=True,
+            llm_base_url="https://llm.example/v1",
+            llm_model="paper-model",
+            vlm_enabled=False,
+        ),
+    )
+
+    service.retrieve(
+        "file-1", pdf_path, "original user question", tmp_path / "figures", use_hyde=True
+    )
+
+    assert embedder.queries == ["original user question"]
 
 
 def test_retrieval_service_fuses_dense_and_bm25_parent_rankings(tmp_path: Path) -> None:
@@ -194,12 +320,12 @@ def test_retrieval_service_fuses_dense_and_bm25_parent_rankings(tmp_path: Path) 
 
     assert [hit.chunk.chunk_id for hit in hits] == [
         "element-000002-parent",
-        "element-000001-parent",
         "element-000003-parent",
+        "element-000001-parent",
     ]
-    assert hits[0].score == pytest.approx(1 / 61 + 1 / 62)
-    assert hits[1].score == pytest.approx(1 / 61)
-    assert hits[2].score == pytest.approx(1 / 62)
+    assert hits[0].score == pytest.approx(1 / 62 + 1.25 / 61)
+    assert hits[1].score == pytest.approx(1.25 / 62)
+    assert hits[2].score == pytest.approx(1 / 61)
 
 
 class FakeReranker:
