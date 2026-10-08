@@ -25,6 +25,31 @@ def test_retrieve_request_uses_similarity_threshold_default() -> None:
     assert request.use_hyde is False
 
 
+def test_retrieve_request_accepts_metadata_filters() -> None:
+    request = RetrieveRequest(
+        file_id="file-1",
+        query="question",
+        filters={
+            "element_types": ["figure", "table"],
+            "page_from": 2,
+            "page_to": 4,
+            "section_path_prefix": ["Methods"],
+        },
+    )
+
+    assert request.filters.page_from == 2
+    assert request.filters.element_types == ["figure", "table"]
+
+
+def test_retrieve_request_rejects_invalid_metadata_filters() -> None:
+    with pytest.raises(ValueError, match="page"):
+        RetrieveRequest(
+            file_id="file-1",
+            query="question",
+            filters={"page_from": 5, "page_to": 2},
+        )
+
+
 def test_retrieve_endpoint_passes_hyde_flag_to_service(monkeypatch, tmp_path: Path) -> None:
     pdf_path = tmp_path / "file-1.pdf"
     pdf_path.write_bytes(b"pdf")
@@ -45,6 +70,33 @@ def test_retrieve_endpoint_passes_hyde_flag_to_service(monkeypatch, tmp_path: Pa
 
     assert response.status_code == 200
     assert captured["use_hyde"] is True
+
+
+def test_retrieve_endpoint_passes_metadata_filters_to_service(monkeypatch, tmp_path: Path) -> None:
+    pdf_path = tmp_path / "file-1.pdf"
+    pdf_path.write_bytes(b"pdf")
+    monkeypatch.setattr(retrieval, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(retrieval, "get_file", lambda _file_id: {"file_id": "file-1"})
+    captured: dict[str, object] = {}
+
+    class Service:
+        def retrieve(self, *args, **kwargs):
+            captured.update(kwargs)
+            return []
+
+    monkeypatch.setattr(retrieval, "retrieval_service", Service())
+    response = TestClient(app).post(
+        "/api/retrieve",
+        json={
+            "file_id": "file-1",
+            "query": "question",
+            "filters": {"element_types": ["figure"], "page_from": 2},
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["filters"].element_types == ("figure",)
+    assert captured["filters"].page_from == 2
 
 
 def test_retrieve_endpoint_returns_clear_error_when_hyde_is_unconfigured(

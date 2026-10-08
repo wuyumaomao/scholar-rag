@@ -120,3 +120,32 @@ def test_parent_expansion_requires_parent_chunks() -> None:
 
     with pytest.raises(ValueError, match="parents"):
         retriever.search([1.0, 0.0], expand_parents=True)
+
+
+def test_search_applies_metadata_filters_before_top_k_selection() -> None:
+    chunks = [
+        make_chunk("wrong-type", meta={"element_types": ["table"], "page_nums": [2]}),
+        make_chunk("matching", meta={"element_types": ["figure"], "page_nums": [2]}),
+        make_chunk("wrong-page", meta={"element_types": ["figure"], "page_nums": [8]}),
+    ]
+    retriever = InMemoryRetriever(chunks, [[1, 0], [0.9, 0.1], [0.8, 0.2]])
+
+    hits = retriever.search(
+        [1, 0],
+        top_k=1,
+        min_score=0,
+        filters={"element_types": ["figure"], "page_from": 1, "page_to": 3},
+    )
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["matching"]
+
+
+def test_search_returns_empty_when_metadata_filter_matches_nothing() -> None:
+    retriever = InMemoryRetriever(
+        [make_chunk("paragraph", meta={"element_types": ["paragraph"]})],
+        [[1, 0]],
+    )
+
+    assert retriever.search(
+        [1, 0], top_k=1, min_score=0, filters={"element_types": ["figure"]}
+    ) == []

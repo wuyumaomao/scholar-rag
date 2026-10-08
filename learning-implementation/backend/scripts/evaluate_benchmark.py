@@ -14,7 +14,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_DIR = BACKEND_DIR.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.chunker import create_chunks
+from app.benchmark_cache import DEFAULT_CACHE_DIR, load_or_create_index
 from app.bm25_retriever import BM25Retriever
 from app.embedding import EmbeddingService
 from app.evaluation import (
@@ -25,6 +25,7 @@ from app.evaluation import (
     retrieval_element_ids_from_metadata,
 )
 from app.pdf_parser import parse_pdf
+from app.related_context import expand_related_figure_context
 from app.retriever import DEFAULT_MIN_SCORE, InMemoryRetriever
 from app.reranker import CrossEncoderReranker
 from app.rrf import fuse_parent_hits
@@ -79,6 +80,8 @@ def evaluate_file(
     reranker_model: str | None = None,
     use_hyde: bool = False,
     hyde_generator: HyDEGenerator | None = None,
+    use_cache: bool = True,
+    cache_dir: Path = DEFAULT_CACHE_DIR,
 ) -> tuple[DatasetMetrics, list[dict[str, Any]]]:
     """Build an index and evaluate dense, hybrid, or hybrid-reranked retrieval."""
     if retrieval_mode not in {"dense", "hybrid", "hybrid-rerank"}:
@@ -106,16 +109,22 @@ def evaluate_file(
     else:
         active_hyde_generator = None
     cases = load_cases(benchmark_path)
-    parsed_pdf = parse_pdf(
+    embedder = EmbeddingService()
+    cached_index = load_or_create_index(
         pdf_path,
         figure_dir=figure_root / pdf_path.stem,
+        embedder=embedder,
+        parser=parse_pdf,
+        cache_dir=cache_dir,
+        use_cache=use_cache,
     )
-    chunking = create_chunks(parsed_pdf)
-    if not chunking.children:
-        raise ValueError(f"没有可检索的 child chunk: {pdf_path}")
-
-    embedder = EmbeddingService()
-    vectors = embedder.embed_texts([child.context for child in chunking.children])
+    logger.info(
+        "Benchmark index cache %s: %s",
+        "HIT" if cached_index.cache_hit else "MISS",
+        pdf_path.name,
+    )
+    chunking = cached_index.chunking
+    vectors = cached_index.vectors
     retriever = InMemoryRetriever(chunking.children, vectors, parents=chunking.parents)
     is_hybrid = retrieval_mode in {"hybrid", "hybrid-rerank"}
     is_reranked = retrieval_mode == "hybrid-rerank"
@@ -186,6 +195,7 @@ def evaluate_file(
             )
             if active_reranker is not None:
                 hits = active_reranker.rerank(case["query"], hits, top_k=k)
+        hits = expand_related_figure_context(hits, chunking.parents)
         ranked_groups = retrieval_element_groups_from_metadata(
             [hit.chunk.meta for hit in hits]
         )
@@ -266,10 +276,22 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=PROJECT_DIR / "evaluation-results.json",
     )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=DEFAULT_CACHE_DIR,
+        help="Docling 解析与文档向量缓存目录",
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="忽略已有缓存，并且不写入新缓存",
+    )
     return parser
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = build_parser()
     args = parser.parse_args()
     if args.k <= 0:
@@ -354,6 +376,8 @@ def main() -> None:
             reranker=run_reranker,
             reranker_model=args.reranker_model,
             use_hyde=args.use_hyde,
+            use_cache=not args.no_cache,
+            cache_dir=args.cache_dir,
         )
         records.append(
             {
@@ -406,9 +430,11 @@ def main() -> None:
             if args.retrieval_mode == "hybrid-rerank"
             else None
         ),
+        "index_cache_enabled": not args.no_cache,
+        "index_cache_dir": str(args.cache_dir),
         "metrics_definition": {
-            "recall_at_k": "命中的 gold element 数 / gold element 总数",
-            "precision_at_k": "Top-k 中命中的 parent element 数 / k",
+            "recall_at_k": "Top-k parent 上下文覆盖的 gold element 数 / gold element 总数；上下文包含关联图表扩展",
+            "precision_at_k": "Top-k 中至少覆盖一个 gold element 的 parent 数 / k；关联图表不另占名额",
             "precision_returned": "实际返回结果中命中的 parent element 数 / 实际返回结果数",
             "mrr": "Top-k 内第一个命中 gold element 的排名倒数的宏平均",
         },

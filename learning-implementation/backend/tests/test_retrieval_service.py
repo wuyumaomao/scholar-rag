@@ -173,6 +173,26 @@ def test_retrieval_service_applies_similarity_threshold(tmp_path: Path) -> None:
     assert permissive_threshold_hits[0].score == pytest.approx((1 + 1.25) / 61)
 
 
+def test_retrieval_service_applies_metadata_filters_to_both_retrievers(
+    tmp_path: Path,
+) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"pdf")
+    service = RetrievalService(
+        embedder=FakeEmbedder(), parser=lambda path, *, figure_dir: parsed_pdf()
+    )
+
+    hits = service.retrieve(
+        "file-1",
+        pdf_path,
+        "architecture",
+        tmp_path / "figures",
+        filters={"element_types": ["figure"], "page_from": 1, "page_to": 3},
+    )
+
+    assert hits == []
+
+
 def test_retrieval_service_uses_settings_for_omitted_search_defaults(tmp_path: Path) -> None:
     pdf_path = tmp_path / "paper.pdf"
     pdf_path.write_bytes(b"pdf")
@@ -196,7 +216,7 @@ def test_hyde_uses_generated_passage_for_dense_and_original_query_for_bm25_and_r
         def __init__(self, chunks) -> None:
             self.chunks = chunks
 
-        def search(self, query: str, *, top_k: int):
+        def search(self, query: str, *, top_k: int, filters=None):
             bm25_queries.append(query)
             return []
 
@@ -456,4 +476,78 @@ def test_retrieval_service_enriches_figure_context(
     assert vision.calls == [
         (image_path, "Figure 1: Architecture"),
         (image_path, "Figure 1: Architecture"),
+    ]
+
+
+def test_retrieval_service_expands_related_figure_after_top_k_selection(
+    tmp_path: Path,
+) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"pdf")
+    image_path = tmp_path / "figure-5.png"
+    image_path.write_bytes(b"png")
+    body = ParsedElement(
+        element_id="element-000002",
+        element_type="paragraph",
+        docling_type="TextItem",
+        docling_label="text",
+        text="dense-first The architecture is shown in Figure 5.",
+        page_num=1,
+        order=1,
+        bbox=None,
+        related_ids=["element-000001"],
+    )
+    figure = ParsedElement(
+        element_id="element-000001",
+        element_type="figure",
+        docling_type="PictureItem",
+        docling_label="picture",
+        text="",
+        page_num=1,
+        order=2,
+        bbox=None,
+        image_path=str(image_path),
+        related_ids=["element-000003", "element-000002"],
+    )
+    caption = ParsedElement(
+        element_id="element-000003",
+        element_type="caption",
+        docling_type="TextItem",
+        docling_label="caption",
+        text="Figure 5: Depth estimation architecture",
+        page_num=1,
+        order=3,
+        bbox=None,
+        related_ids=["element-000001"],
+    )
+    vision = FakeVisionService()
+    service = RetrievalService(
+        embedder=FakeEmbedder(),
+        vision_service=vision,
+        parser=lambda path, *, figure_dir: ParsedPdf(
+            page_count=1, elements=[body, figure, caption]
+        ),
+        reranker=FakeReranker(),
+    )
+
+    hits = service.retrieve(
+        "file-1",
+        pdf_path,
+        "architecture",
+        tmp_path / "figures",
+        top_k=1,
+        child_top_k=3,
+        min_score=0.1,
+    )
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["element-000002-parent"]
+    assert "Figure 5: Depth estimation architecture" in hits[0].chunk.context
+    assert "encoder-decoder architecture" in hits[0].chunk.context
+    assert hits[0].chunk.meta["context_element_ids"] == [
+        "element-000002",
+        "element-000001",
+        "element-000003",
+    ]
+    assert vision.calls == [
+        (image_path, "Figure 5: Depth estimation architecture")
     ]
