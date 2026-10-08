@@ -50,3 +50,25 @@ def test_search_returns_empty_for_query_without_known_terms() -> None:
     retriever = BM25Retriever([make_chunk("one", "one document")])
 
     assert retriever.search("unknown term", top_k=5) == []
+
+
+def test_search_applies_metadata_filters_before_top_k_selection() -> None:
+    chunks = [
+        Chunk("wrong-type", "depth estimation endoscopy", {"element_types": ["table"]}),
+        Chunk("matching", "depth estimation endoscopy", {"element_types": ["figure"]}),
+    ]
+    retriever = BM25Retriever(chunks)
+
+    hits = retriever.search(
+        "depth estimation",
+        top_k=1,
+        filters={"element_types": ["figure"]},
+    )
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["matching"]
+
+
+def test_search_returns_empty_for_candidate_set_with_no_tokens() -> None:
+    retriever = BM25Retriever([make_chunk("empty", "   ")])
+
+    assert retriever.search("depth", top_k=1) == []

@@ -655,6 +655,46 @@ RRF(parent) = 1 / (rrf_k + dense_rank)
 
 请求必须提供已上传 PDF 的 `file_id` 和非空 `query`。`child_top_k`（默认配置项 `FETCH_K=20`）控制 Dense 和 BM25 各自最多取多少个 child 候选；`top_k`（默认 `TOP_K=5`）控制融合后最多返回多少个 parent。当前默认 `MIN_SCORE=0.8`，只过滤 Dense 候选；BM25 候选独立参与融合，因此即使某个 parent 的 Dense 分数低于阈值，它仍可能通过 BM25 被召回。`RRF_K` 控制倒数排名融合的平滑参数。默认值集中在 `Settings`，可由环境变量或单次请求显式覆盖。
 
+##### 元数据过滤
+
+`/api/retrieve` 可以在 Dense 和 BM25 给 child 打分之前，按 chunk metadata 缩小候选范围。过滤器作为请求里的 `filters` 对象传入，支持元素类型、PDF 物理页码范围和章节路径前缀：
+
+```json
+{
+  "filters": {
+    "element_types": ["figure", "table"],
+    "page_from": 2,
+    "page_to": 8,
+    "section_path_prefix": ["Methods"]
+  }
+}
+```
+
+条件组之间采用 AND；`element_types` 列表内采用 OR。页码范围两端都包含，chunk 有任一页落入范围就符合。章节路径按完整层级项匹配前缀，因此 `Methods` 会包含 `Methods > Experiments`，但不会误匹配 `MethodsX`。类型可用 `paragraph`、`figure`、`table`、`formula`、`list_item`、`caption`、`footnote`、`section_header` 和 `unknown`；其中不会生成 chunk 的标题类型自然返回空结果。没有传 `filters` 或传空对象时，原检索行为不变。BM25 会按过滤后的候选集合重新计算文档频率和平均长度，避免不相关章节影响过滤范围内的词法排序。
+
+例如，只查第 2–8 页 Methods 章节里的图和表：
+
+```cmd
+curl.exe -X POST "http://127.0.0.1:8100/api/retrieve" -H "Content-Type: application/json" -d "{\"file_id\":\"替换为上传响应中的file_id\",\"query\":\"What does the architecture diagram show?\",\"filters\":{\"element_types\":[\"figure\",\"table\"],\"page_from\":2,\"page_to\":8,\"section_path_prefix\":[\"Methods\"]}}"
+```
+
+##### 元数据过滤的 benchmark 对照
+
+现有 7 篇论文、116 题中，有 9 题明确问 Figure，1 题明确问 Table。只对这 10 题启用严格类型过滤（Figure 题只保留 `figure`，Table 题只保留 `table`），其余问题不加过滤；没有用 evidence 的 element、页码或章节反推 filter，避免答案泄漏。Dense/BM25 均取 child Top 20，`min_score=0.7`，RRF 的 `k=60`、BM25 权重 `1.25`，rerank 候选 20、最终 Top 5。
+
+| 范围 | 设置 | Recall@5 | Precision@5 | MRR@5 |
+| --- | --- | ---: | ---: | ---: |
+| 全部 116 题 | 不加类型过滤 | 0.7862 | 0.2414 | 0.7233 |
+| 全部 116 题 | 只在点名 Figure/Table 的题上严格过滤 | 0.7798 | 0.2379 | 0.7319 |
+| 10 道 Figure/Table 题 | 不加类型过滤 | 0.5500 | 0.2000 | 0.6500 |
+| 10 道 Figure/Table 题 | 严格按图/表类型过滤 | 0.4750 | 0.1600 | 0.7500 |
+
+严格类型过滤让这 10 题的第一个相关结果排名更靠前（MRR 上升），但整体召回和 Precision 下降。原因是问题虽然点名图表，答案证据仍常包含解释图表的正文段落；只允许 `figure` 或 `table` 会把这些段落挡掉。比如 Figure 5 的网络结构题仍把对应图 parent 排在首位，而另一题的图表说明也能更早命中；但这不足以抵消被过滤掉的正文 evidence。对“只看图表”这个明确意图，类型过滤有价值；如果想回答“图表说明了什么”，更合适的策略是让图表和正文都可检索，或将相关正文/图注绑定为同一返回上下文，而不是默认强制只搜图表。
+
+速度用原始 `1710.11216v3.pdf` 的 Figure 5 问题单独测量：该文档有 219 个 child，其中 10 个 figure child。固定已生成的 query vector，预热后交替重复 100 次 Dense + BM25 + RRF（不含 query embedding、解析/建索引和 Cross-Encoder），中位查询时间从 5.38 ms 降至 0.64 ms，约快 88%。这说明当过滤结果远少于全文时，过滤可减少查询打分开销；该微基准只有一篇论文、一个查询，不能外推成整体服务延迟提升。首次请求解析和向量化整篇 PDF 的时间不变。
+
+现阶段结论：元数据过滤提供了用户明确限定范围时的控制能力，也能减少查询阶段的候选打分；严格类型过滤会牺牲部分 Recall，不能默认套在所有图表问题上。benchmark 没有用户指定的页码或章节范围，所以本轮没有用 gold 的页码/section 做过滤实验。
+
 默认关闭 Cross-Encoder 时，响应中的 `score` 是 RRF 融合分数，不再是 cosine 相似度；不同查询的 RRF 分数也不适合直接当作概率比较。启用重排后，`score` 是 Cross-Encoder 输出的相关性分数，同样不是概率，且它和 RRF 分数不在同一量纲。响应还包含 `chunk_id`、`context` 和 `metadata`；figure parent 的 metadata 会包含 `image_path`，随后继续执行 VLM 图片描述增强。
 
 第一次查询某个 PDF 时，服务会解析并向量化整份文件，因此可能需要等待 Docling 和 embedding 模型完成加载；后续查询复用进程内缓存。服务重启后缓存会消失，并在下次查询时重新构建。当前还没有把 parent、child 或向量持久化到 Milvus/PostgreSQL。
@@ -694,6 +734,16 @@ cd learning-implementation\backend
 ..\.venv\Scripts\python.exe scripts\evaluate_benchmark.py --retrieval-mode hybrid --pdf-dir C:\Users\93655\Desktop\paper --k 5 --child-top-k 20 --min-score 0.7 --rrf-k 60 --output ..\evaluation-results-hybrid.json
 ..\.venv\Scripts\python.exe scripts\evaluate_benchmark.py --retrieval-mode hybrid-rerank --pdf-dir C:\Users\93655\Desktop\paper --k 5 --child-top-k 20 --min-score 0.7 --rrf-k 60 --rerank-candidate-k 10 --output ..\evaluation-results-hybrid-rerank.json
 ```
+
+benchmark 默认启用本地索引缓存，目录为 `backend/data/benchmark-cache/`（该运行时目录被 Git 忽略）。每篇论文的缓存保存 Docling 结构化解析结果和 child 文本向量；命中后仍会从解析元素重建 parent/child chunk，并照常运行检索与 rerank。缓存文件使用 gzip JSON 和原子替换写入；损坏或不兼容时会显示警告并重新解析、向量化。
+
+缓存指纹会在 PDF 内容、解析器或 chunker 源码、Docling/相关依赖版本、embedding 模型名称、chunk 长度/重叠参数或图片输出目录发生变化时失效。相同文件路径的旧缓存会被新版本覆盖。`--no-cache` 会忽略已有缓存并且不写缓存，不会删除已有缓存；`--cache-dir` 可更改目录。例如：
+
+```cmd
+..\.venv\Scripts\python.exe scripts\evaluate_benchmark.py --retrieval-mode hybrid-rerank --pdf-dir C:\Users\93655\Desktop\paper --k 5 --child-top-k 20 --min-score 0.7 --rrf-k 60 --bm25-weight 1.25 --rerank-candidate-k 20 --cache-dir data\benchmark-cache --output ..\evaluation-results-cached.json
+```
+
+2026-10-08 对 7 篇论文、116 个问题做了冷/热缓存验证，固定相同检索参数和本地 reranker：冷跑 387.4 秒，热跑 114.1 秒；7 篇全部 cache HIT，耗时减少约 70.5%。两次逐题检索结果完全一致，Recall@5=`0.7862`、Precision@5=`0.2414`、MRR=`0.7233`。节省主要来自跳过 Docling 和文档向量生成；热跑仍需加载模型并执行每个问题的 Dense/BM25/RRF 和 rerank。缓存约 6.51 MiB，不包含 PDF 原文。若要强制完整重建，可在命令末尾添加 `--no-cache`。
 
 第一次运行 `hybrid-rerank` 需要下载 Cross-Encoder 权重；模型会在进程内复用，不会为每篇论文重新加载。API 在线启用时，在 `backend/.env` 设置 `RERANKER_ENABLED=true` 和 `RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2`，可选设置 `RERANK_CANDIDATE_K=10`，然后重启后端。候选 parent 少于 10 个时会全部参与重排。Cross-Encoder 只改变这批候选的顺序，不能找回未进入 RRF 候选集的 parent。
 
@@ -829,6 +879,23 @@ score(parent) = dense_weight / (rrf_k + dense_rank)
 ```
 
 `source_element_ids` 用来说明 parent 的主要来源，`context_element_ids` 用来说明这个 parent 的文字上下文还包含哪些结构化元素。评测按 parent 计排名和 Precision；判断是否命中 gold evidence 时再检查整个 `context_element_ids` 组。这样 q006 的 gold 图注 `element-000066` 可以由第 2 名的 `element-000065-parent` 命中，同时不会把图片和图注错误地算成两个返回结果。benchmark 仍保存原始 Docling evidence ID，不直接改成 chunk ID。
+
+#### 用 related IDs 把关联图表加入正文上下文
+
+解析器会用 Docling 的 caption 关系连接图表与图注；正文或列表项明确提到 Figure/Table 编号时，若编号唯一对应到解析出的图表，也会把正文和图表互相写入 `related_ids`。过去 chunk 只保留了这些关系 metadata，没有把关联图表内容加入命中正文的上下文；而单独的 Figure parent 还可能在 reranker 最终 Top-k 截断时被排除。
+
+现在检索先照常完成 Dense/BM25、RRF、rerank 和最终 Top-k，再检查每个命中 parent 的 `related_element_ids`。如果它关联到一个 figure parent，就把该图的图注和可用的 VLM 图片描述附加到正文 context 中；同一个图在一组结果内只扩展一次。关联图不作为额外排名结果，因此不会改变 Top-k 名额和原 parent 顺序。返回 metadata 的 `context_element_ids` 会包含实际加入上下文的 Figure 与 caption element，并用 `expanded_related_element_ids` 标明这些扩展来源。VLM 未启用或调用失败时，图注仍会加入，正文检索保持可用。
+
+benchmark runner 在同一排序阶段之后运行相同的关联上下文扩展，再按 `context_element_ids` 评分；所以 Recall@k 衡量最终 parent 上下文覆盖了多少 gold element，Precision@k 仍按命中的 parent 数计算，关联图不另占一名。benchmark 不调用远程 VLM，因此这项评测验证结构化关联和图注上下文覆盖，不验证 VLM 描述是否准确。对 7 篇论文、116 题的同参对照结果为：
+
+| 指标 | 原 parent context | 加入 related figure context |
+|---|---:|---:|
+| Recall@5 | 0.7862 | 0.8008 |
+| Precision@5 | 0.2414 | 0.2466 |
+| Precision@returned | 0.2414 | 0.2466 |
+| MRR | 0.7233 | 0.7319 |
+
+5 个问题的逐题分数发生变化，其余 111 题不变。新的逐题报告保存在 `evaluation-results-hybrid-rerank-related-context.json`；此前的 baseline 文件保留。指标上升来自相关图表证据现在确实随正文进入上下文，不代表 Dense、BM25 或 reranker 的原始排序本身变好了。
 
 #### 统一模型配置
 

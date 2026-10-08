@@ -1,7 +1,6 @@
 """Build and query an in-memory retrieval index for uploaded PDFs."""
 
-from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import logging
 from pathlib import Path
 from threading import RLock
@@ -14,6 +13,8 @@ from app.embedding import EmbeddingService
 from app.hyde import HyDEGenerator
 from app.pdf_parser import ParsedPdf, parse_pdf
 from app.retriever import InMemoryRetriever, RetrievalHit
+from app.retrieval_filters import FilterInput, coerce_filters
+from app.related_context import expand_related_figure_context
 from app.reranker import CrossEncoderReranker
 from app.rrf import fuse_parent_hits
 from app.vlm import VLMError, VisionService
@@ -71,6 +72,7 @@ class RetrievalService:
         child_top_k: int | None = None,
         min_score: float | None = None,
         use_hyde: bool = False,
+        filters: FilterInput = None,
     ) -> list[RetrievalHit]:
         """Return unique parent hits for a query over one uploaded PDF."""
         resolved_top_k = self._settings.top_k if top_k is None else top_k
@@ -109,10 +111,12 @@ class RetrievalService:
             self._embedder.embed_query(dense_query),
             top_k=resolved_child_top_k,
             min_score=resolved_min_score,
+            filters=filters,
         )
         bm25_hits = index.bm25_retriever.search(
             query,
             top_k=resolved_child_top_k,
+            filters=filters,
         )
         parent_candidate_k = resolved_top_k
         if self._reranker is not None:
@@ -129,42 +133,19 @@ class RetrievalService:
         )
         if self._reranker is not None:
             hits = self._reranker.rerank(query, hits, top_k=resolved_top_k)
-        return self._enrich_figure_hits(hits)
+        return expand_related_figure_context(
+            hits,
+            index.parents,
+            describe_image=self._describe_image,
+        )
 
-    def _enrich_figure_hits(self, hits: list[RetrievalHit]) -> list[RetrievalHit]:
-        """Add best-effort VLM descriptions to retrieved figure parents."""
-        enriched: list[RetrievalHit] = []
-        for hit in hits:
-            metadata = hit.chunk.meta
-            image_path = metadata.get("image_path")
-            element_types = metadata.get("element_types", [])
-            if not image_path or "figure" not in element_types:
-                enriched.append(hit)
-                continue
-
-            caption = hit.chunk.context.removeprefix("Figure:").strip()
-            try:
-                description = self._vision_service.describe_image(Path(str(image_path)), caption)
-            except (OSError, VLMError) as exc:
-                logger.warning("VLM figure description skipped for %s: %s", image_path, exc)
-                enriched.append(hit)
-                continue
-            if not description:
-                enriched.append(hit)
-                continue
-
-            enriched_metadata = deepcopy(metadata)
-            enriched_metadata["image_description"] = description
-            enriched_context = (
-                f"{hit.chunk.context}\n\nImage description: {description}"
-            )
-            enriched_chunk = replace(
-                hit.chunk,
-                context=enriched_context,
-                meta=enriched_metadata,
-            )
-            enriched.append(replace(hit, chunk=enriched_chunk))
-        return enriched
+    def _describe_image(self, image_path: Path, caption: str) -> str:
+        """Return a best-effort VLM description without breaking text retrieval."""
+        try:
+            return self._vision_service.describe_image(image_path, caption)
+        except (OSError, VLMError) as exc:
+            logger.warning("VLM figure description skipped for %s: %s", image_path, exc)
+            return ""
 
     def invalidate(self, file_id: str) -> None:
         """Remove a deleted or replaced PDF's in-memory index."""

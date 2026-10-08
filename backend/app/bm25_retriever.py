@@ -7,6 +7,7 @@ from typing import Sequence
 
 from app.chunker import Chunk
 from app.retriever import RetrievalHit
+from app.retrieval_filters import FilterInput, coerce_filters, matches_filters
 
 
 _TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
@@ -39,8 +40,9 @@ class BM25Retriever:
         self.b = b
         self._tokenized_documents = [_tokenize(chunk.context) for chunk in self._chunks]
         self._document_lengths = [len(tokens) for tokens in self._tokenized_documents]
-        self._average_document_length = sum(self._document_lengths) / len(self._chunks)
-
+        self._average_document_length = (
+            sum(self._document_lengths) / len(self._chunks)
+        )
         document_frequency: Counter[str] = Counter()
         for tokens in self._tokenized_documents:
             document_frequency.update(set(tokens))
@@ -50,7 +52,13 @@ class BM25Retriever:
             for token, frequency in document_frequency.items()
         }
 
-    def search(self, query: str, top_k: int = 5) -> list[RetrievalHit]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        *,
+        filters: FilterInput = None,
+    ) -> list[RetrievalHit]:
         """Return up to ``top_k`` child chunks with a positive BM25 score."""
         if not isinstance(query, str) or not query.strip():
             raise ValueError("query 不能为空")
@@ -61,11 +69,48 @@ class BM25Retriever:
         if not query_tokens:
             raise ValueError("query 必须包含可检索的词")
 
+        resolved_filters = coerce_filters(filters)
+        if not (
+            resolved_filters.element_types
+            or resolved_filters.page_from is not None
+            or resolved_filters.page_to is not None
+            or resolved_filters.section_path_prefix
+        ):
+            candidate_indices = range(len(self._chunks))
+            average_length = self._average_document_length
+            candidate_idf = self._idf
+        else:
+            candidate_indices = [
+                index
+                for index, chunk in enumerate(self._chunks)
+                if matches_filters(chunk.meta, resolved_filters)
+            ]
+            if not candidate_indices:
+                return []
+
+            candidate_count = len(candidate_indices)
+            average_length = sum(
+                self._document_lengths[index] for index in candidate_indices
+            ) / candidate_count
+            if average_length == 0:
+                return []
+            document_frequency: Counter[str] = Counter()
+            for index in candidate_indices:
+                document_frequency.update(set(self._tokenized_documents[index]))
+            candidate_idf = {
+                token: log(1 + (candidate_count - frequency + 0.5) / (frequency + 0.5))
+                for token, frequency in document_frequency.items()
+            }
+
+        if average_length == 0:
+            return []
+
         scored: list[tuple[int, float]] = []
-        for index, tokens in enumerate(self._tokenized_documents):
+        for index in candidate_indices:
+            tokens = self._tokenized_documents[index]
             frequencies = Counter(tokens)
             document_length = self._document_lengths[index]
-            length_ratio = document_length / self._average_document_length
+            length_ratio = document_length / average_length
             score = 0.0
             for token in query_tokens:
                 frequency = frequencies.get(token, 0)
@@ -73,7 +118,7 @@ class BM25Retriever:
                     continue
                 numerator = frequency * (self.k1 + 1)
                 denominator = frequency + self.k1 * (1 - self.b + self.b * length_ratio)
-                score += self._idf[token] * numerator / denominator
+                score += candidate_idf[token] * numerator / denominator
             if score > 0:
                 scored.append((index, score))
 

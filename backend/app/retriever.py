@@ -5,6 +5,7 @@ from math import isfinite, sqrt
 from typing import Sequence
 
 from app.chunker import Chunk
+from app.retrieval_filters import FilterInput, coerce_filters, matches_filters
 
 
 DEFAULT_MIN_SCORE = 0.8
@@ -64,6 +65,7 @@ class InMemoryRetriever:
         child_top_k: int | None = None,
         expand_parents: bool = False,
         min_score: float = DEFAULT_MIN_SCORE,
+        filters: FilterInput = None,
     ) -> list[RetrievalHit]:
         """Search children, optionally returning unique parent chunks.
 
@@ -87,13 +89,33 @@ class InMemoryRetriever:
             raise ValueError("查询向量维度与索引维度不一致")
         query_norm = sqrt(sum(value * value for value in query))
 
+        resolved_filters = coerce_filters(filters)
+        if (
+            resolved_filters.element_types
+            or resolved_filters.page_from is not None
+            or resolved_filters.page_to is not None
+            or resolved_filters.section_path_prefix
+        ):
+            eligible_indices = [
+                index
+                for index, chunk in enumerate(self._chunks)
+                if matches_filters(chunk.meta, resolved_filters)
+            ]
+        else:
+            eligible_indices = range(len(self._chunks))
         scored = [
             (
                 index,
-                sum(query_value * vector_value for query_value, vector_value in zip(query, vector))
-                / (query_norm * sqrt(sum(value * value for value in vector))),
+                sum(
+                    query_value * vector_value
+                    for query_value, vector_value in zip(query, self._vectors[index])
+                )
+                / (
+                    query_norm
+                    * sqrt(sum(value * value for value in self._vectors[index]))
+                ),
             )
-            for index, vector in enumerate(self._vectors)
+            for index in eligible_indices
         ]
         scored.sort(key=lambda item: (-item[1], item[0]))
         child_hits = [
