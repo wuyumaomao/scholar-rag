@@ -1,5 +1,5 @@
-from app.chunker import Chunk
-from app.retrieval_filters import RetrievalFilters, matches_filters
+from app.documents.chunker import Chunk
+from app.retrieval.retrieval_filters import RetrievalFilters, matches_filters
 
 
 def test_filters_match_element_type_and_overlapping_page_range() -> None:

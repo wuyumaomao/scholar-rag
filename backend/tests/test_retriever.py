@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.chunker import Chunk
-from app.retriever import InMemoryRetriever
+from app.documents.chunker import Chunk
+from app.retrieval.retriever import InMemoryRetriever
 
 
 def make_chunk(

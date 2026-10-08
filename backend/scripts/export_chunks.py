@@ -7,8 +7,8 @@ import sys
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.chunker import Chunk, create_chunks
-from app.pdf_parser import parse_pdf
+from app.documents.chunker import Chunk, create_chunks
+from app.documents.pdf_parser import parse_pdf
 
 
 PDF_PATH = BACKEND_DIR.parent / "1710.11216v3.pdf"

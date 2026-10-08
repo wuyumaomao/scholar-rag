@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 
-from app.store import create_file, delete_file, get_file, list_files
+from app.storage.store import create_file, delete_file, get_file, list_files
 from app.routers.retrieval import invalidate_retrieval_index
 
 router = APIRouter(prefix="/api/files", tags=["files"])

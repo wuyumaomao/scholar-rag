@@ -9,6 +9,22 @@
 - 不直接复制整套原项目代码；每个阶段都保持可运行、可检查。
 - 本目录的应用与根目录的 Docker Compose 是分开的。运行练习服务时注意使用不同端口，避免和原项目冲突。
 
+## 后端目录
+
+学习版后端位于 `backend/`，`backend/app/` 按功能分组：
+
+```text
+app/
+  main.py, config.py       应用入口和环境配置
+  routers/                 FastAPI HTTP 接口
+  documents/               PDF 结构化解析和 parent/child chunk
+  retrieval/               Embedding、Dense/BM25、RRF、rerank、HyDE、VLM
+  evaluation/              benchmark 指标和解析/向量缓存
+  storage/                 PostgreSQL 连接和数据读写
+```
+
+检索算法仍各自放在独立模块中，方便按知识点阅读和单独测试；`scripts/` 放手动运行的导出/评测工具，`tests/` 验证模块行为。
+
 ## 计划里程碑
 
 1. 最小 FastAPI 服务与健康检查接口。

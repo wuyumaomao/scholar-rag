@@ -11,16 +11,16 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_DIR = BACKEND_DIR.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.chunker import create_chunks
-from app.embedding import EmbeddingService
-from app.evaluation import (
+from app.documents.chunker import create_chunks
+from app.retrieval.embedding import EmbeddingService
+from app.evaluation.metrics import (
     evidence_element_ids,
     evaluate_ranked_groups,
     retrieval_element_groups_from_metadata,
     retrieval_element_ids_from_metadata,
 )
-from app.pdf_parser import parse_pdf
-from app.retriever import DEFAULT_MIN_SCORE, InMemoryRetriever
+from app.documents.pdf_parser import parse_pdf
+from app.retrieval.retriever import DEFAULT_MIN_SCORE, InMemoryRetriever
 from scripts.evaluate_benchmark import load_cases
 
 

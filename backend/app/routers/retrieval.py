@@ -8,9 +8,9 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import Settings
-from app.retrieval_filters import RetrievalFilters
-from app.retrieval_service import RetrievalService
-from app.store import get_file
+from app.retrieval.retrieval_filters import RetrievalFilters
+from app.retrieval.retrieval_service import RetrievalService
+from app.storage.store import get_file
 
 router = APIRouter(prefix="/api/retrieve", tags=["retrieval"])
 UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"

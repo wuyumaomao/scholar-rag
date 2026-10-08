@@ -518,10 +518,10 @@ DELETE /api/files/{file_id}     删除磁盘文件和对应的元数据
 
 上传时先将内容写入临时文件，成功后原子重命名为 `{file_id}.pdf`，再写入 `files` 表。元数据写入失败时会清理已保存的文件，避免留下没有记录的 PDF。删除时先查询元数据，找不到文件返回 `404`；找到后删除磁盘文件，再删除表记录。
 
-文件管理完成后，学习版先用独立模块验证 PDF 解析，不把解析逻辑直接塞进上传路由。`backend/app/pdf_parser.py` 使用 Docling 的 `DocumentConverter`，把每个文档元素保存为结构化数据：
+文件管理完成后，学习版先用独立模块验证 PDF 解析，不把解析逻辑直接塞进上传路由。`backend/app/documents/pdf_parser.py` 使用 Docling 的 `DocumentConverter`，把每个文档元素保存为结构化数据：
 
 ```python
-from app.pdf_parser import extract_body_text, parse_pdf
+from app.documents.pdf_parser import extract_body_text, parse_pdf
 
 result = parse_pdf("paper.pdf")
 print(result.page_count)
@@ -548,7 +548,7 @@ PDF 里的文字除了内容，还带有页面坐标（bounding box，简称 bbo
 
 #### Parent/Child Chunk 与长文本切分
 
-解析元素保留 Docling 的结构边界；chunk 是为后续检索准备的文本单元。学习版通过 `backend/app/chunker.py` 将每个有文本的正文元素单独转换成一个 parent，不把相邻段落拼在一起。较长的段落、列表项和公式可以拆成多个 child；表格保持完整。若一个 caption 与表格相关联，且 caption 文本已包含在表格元素文本中，chunker 会跳过这个重复 caption chunk；结构化解析结果仍保留原 caption 和关联关系，而 table chunk 的 `related_element_ids` 会排除已折叠 caption 的 ID。章节标题只更新后续正文的 `section_path`，不单独生成 parent 或检索 child，避免短标题占用 Top-k。child 记录 `parent_chunk_id`，并保留来源元素 ID、元素类型、页码、章节路径、相关元素 ID 和页面 provenance。
+解析元素保留 Docling 的结构边界；chunk 是为后续检索准备的文本单元。学习版通过 `backend/app/documents/chunker.py` 将每个有文本的正文元素单独转换成一个 parent，不把相邻段落拼在一起。较长的段落、列表项和公式可以拆成多个 child；表格保持完整。若一个 caption 与表格相关联，且 caption 文本已包含在表格元素文本中，chunker 会跳过这个重复 caption chunk；结构化解析结果仍保留原 caption 和关联关系，而 table chunk 的 `related_element_ids` 会排除已折叠 caption 的 ID。章节标题只更新后续正文的 `section_path`，不单独生成 parent 或检索 child，避免短标题占用 Top-k。child 记录 `parent_chunk_id`，并保留来源元素 ID、元素类型、页码、章节路径、相关元素 ID 和页面 provenance。
 
 图片使用 figure chunk 表示。解析阶段仍保留 `figure` 和 `caption` 两个结构化元素；chunk 阶段把关联 caption 的文字合并到 figure 的 `context`，并跳过这个 caption 的独立 chunk，避免同一段图注重复 embedding。figure 不拆分，所以 figure parent 和 figure child 的 `context` 相同；child 用于检索，parent 用于命中后的完整上下文。传入 `parse_pdf(..., figure_dir=...)` 后，学习版会用 PyMuPDF 按 figure 的 bbox 将图片裁剪到独立目录，图片路径写入 parent 和 child 的 metadata：`image_path`。图片二进制本身不做文本 embedding，命中 figure child 后再根据 `image_path` 交给 VLM。
 
@@ -565,7 +565,7 @@ cd learning-implementation\backend
 
 #### Child Chunk 的 Embedding
 
-chunk 生成后，下一步是把用于检索的 child 文本转换成向量。学习版的 `backend/app/embedding.py` 用 `EmbeddingService` 封装 Sentence Transformers：`embed_texts()` 批量处理多个 child，`embed_query()` 处理用户问题，`dimension` 返回模型向量维度。默认模型沿用原项目配置的 `BAAI/bge-small-en-v1.5`。
+chunk 生成后，下一步是把用于检索的 child 文本转换成向量。学习版的 `backend/app/retrieval/embedding.py` 用 `EmbeddingService` 封装 Sentence Transformers：`embed_texts()` 批量处理多个 child，`embed_query()` 处理用户问题，`dimension` 返回模型向量维度。默认模型沿用原项目配置的 `BAAI/bge-small-en-v1.5`。
 
 嵌入模型把一段文本映射成固定长度的数字数组。语义相近的文本，其向量通常更接近；后续向量库会根据这种距离返回 Top-k child。服务要求模型返回归一化向量，便于后续使用余弦相似度或内积比较。当前模块只负责“文本 → 向量”，不保存向量，也不连接 Milvus。
 
@@ -575,14 +575,14 @@ chunk 生成后，下一步是把用于检索的 child 文本转换成向量。�
 cd learning-implementation
 uv pip install --python .venv\Scripts\python.exe -r backend\requirements.txt
 cd backend
-..\.venv\Scripts\python.exe -c "from app.embedding import EmbeddingService; s=EmbeddingService(); v=s.embed_texts(['RAG combines retrieval and generation.']); q=s.embed_query('What is RAG?'); print('dimension:', s.dimension); print('document:', len(v), len(v[0])); print('query:', len(q))"
+..\.venv\Scripts\python.exe -c "from app.retrieval.embedding import EmbeddingService; s=EmbeddingService(); v=s.embed_texts(['RAG combines retrieval and generation.']); q=s.embed_query('What is RAG?'); print('dimension:', s.dimension); print('document:', len(v), len(v[0])); print('query:', len(q))"
 ```
 
 验证结果应显示一个文档向量、一个查询向量，并且两者维度相同。这个阶段只验证模型和接口是否正常；等向量化通过后，再实现本地相似度检索，最后接 Milvus。
 
 #### 本地 Cosine Top-k 检索
 
-Embedding 验证后，学习版先用 `backend/app/retriever.py` 的 `InMemoryRetriever` 做本地检索。它接收一组 child 和对应向量，查询时接收问题向量，计算每个 child 与问题的余弦相似度，按分数从高到低返回前 `top_k` 个 `RetrievalHit`。这个阶段不需要 Milvus，目的是单独验证向量化和检索排序是否符合预期。
+Embedding 验证后，学习版先用 `backend/app/retrieval/retriever.py` 的 `InMemoryRetriever` 做本地检索。它接收一组 child 和对应向量，查询时接收问题向量，计算每个 child 与问题的余弦相似度，按分数从高到低返回前 `top_k` 个 `RetrievalHit`。这个阶段不需要 Milvus，目的是单独验证向量化和检索排序是否符合预期。
 
 ```python
 retriever = InMemoryRetriever(children, child_vectors)
@@ -610,15 +610,15 @@ hits = retriever.search(
 
 ```cmd
 cd learning-implementation\backend
-..\.venv\Scripts\python.exe -c "from app.pdf_parser import parse_pdf; from app.chunker import create_chunks; from app.embedding import EmbeddingService; from app.retriever import InMemoryRetriever; r=parse_pdf('../1710.11216v3.pdf'); c=create_chunks(r).children; e=EmbeddingService(); vs=e.embed_texts([x.context for x in c]); hits=InMemoryRetriever(c,vs).search(e.embed_query('How is depth estimated from endoscopy images?'),top_k=3); [print(h.score, h.chunk.chunk_id, h.chunk.context[:160].replace(chr(10), ' ')) for h in hits]"
+..\.venv\Scripts\python.exe -c "from app.documents.pdf_parser import parse_pdf; from app.documents.chunker import create_chunks; from app.retrieval.embedding import EmbeddingService; from app.retrieval.retriever import InMemoryRetriever; r=parse_pdf('../1710.11216v3.pdf'); c=create_chunks(r).children; e=EmbeddingService(); vs=e.embed_texts([x.context for x in c]); hits=InMemoryRetriever(c,vs).search(e.embed_query('How is depth estimated from endoscopy images?'),top_k=3); [print(h.score, h.chunk.chunk_id, h.chunk.context[:160].replace(chr(10), ' ')) for h in hits]"
 ```
 
 #### 本地 BM25 child 检索
 
-向量检索按语义相似度排序，BM25 按词项是否出现在文本中排序。学习版的 `backend/app/bm25_retriever.py` 在内存中实现 Okapi BM25：先把 child 文本和 query 转成小写词元，再根据词频、逆文档频率和文档长度计算分数。BM25 本身只返回 child；在 RRF 融合阶段，会把 dense 和 BM25 的 child 排名分别映射到 parent，并去除重复 parent。
+向量检索按语义相似度排序，BM25 按词项是否出现在文本中排序。学习版的 `backend/app/retrieval/bm25_retriever.py` 在内存中实现 Okapi BM25：先把 child 文本和 query 转成小写词元，再根据词频、逆文档频率和文档长度计算分数。BM25 本身只返回 child；在 RRF 融合阶段，会把 dense 和 BM25 的 child 排名分别映射到 parent，并去除重复 parent。
 
 ```python
-from app.bm25_retriever import BM25Retriever
+from app.retrieval.bm25_retriever import BM25Retriever
 
 bm25 = BM25Retriever(chunk_result.children)
 hits = bm25.search("How is depth estimated from endoscopy images?", top_k=20)
@@ -630,7 +630,7 @@ BM25 的分数和 cosine 分数不是同一种量纲，所以不能直接把两�
 
 #### Parent 去重与 RRF 融合
 
-Dense 和 BM25 都返回 child，但同一个 parent 可能包含多个 child。如果直接合并 child，会让一个 parent 因为命中多个 child 而重复出现。因此 `backend/app/rrf.py` 先在每个检索通道内部按 `parent_chunk_id` 分组，只保留该 parent 的最佳排名，再使用 Reciprocal Rank Fusion：
+Dense 和 BM25 都返回 child，但同一个 parent 可能包含多个 child。如果直接合并 child，会让一个 parent 因为命中多个 child 而重复出现。因此 `backend/app/retrieval/rrf.py` 先在每个检索通道内部按 `parent_chunk_id` 分组，只保留该 parent 的最佳排名，再使用 Reciprocal Rank Fusion：
 
 ```text
 RRF(parent) = 1 / (rrf_k + dense_rank)
@@ -961,7 +961,7 @@ set VLM_API_KEY=服务商API_KEY
 交给后续 LLM
 ```
 
-`backend/app/vlm.py` 负责 VLM 请求、响应解析和按图片修改时间缓存。`backend/app/retrieval_service.py` 在返回 figure parent 时调用它，并把结果放入：
+`backend/app/retrieval/vlm.py` 负责 VLM 请求、响应解析和按图片修改时间缓存。`backend/app/retrieval/retrieval_service.py` 在返回 figure parent 时调用它，并把结果放入：
 
 ```json
 {
@@ -989,14 +989,14 @@ set VLM_TIMEOUT_SECONDS=60
 
 ### 8.6 Python 如何连接并执行 SQL
 
-Python 使用 `psycopg[binary]` 驱动连接 PostgreSQL。`backend/app/database.py` 只负责提供连接：
+Python 使用 `psycopg[binary]` 驱动连接 PostgreSQL。`backend/app/storage/database.py` 只负责提供连接：
 
 ```python
 def get_connection() -> Connection:
     return psycopg.connect(DATABASE_URL)
 ```
 
-`backend/app/store.py` 负责数据访问；router 不直接写 SQL。这种分层是：
+`backend/app/storage/store.py` 负责数据访问；router 不直接写 SQL。这种分层是：
 
 ```text
 chat.py / sessions.py（HTTP 路由）

@@ -14,23 +14,23 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_DIR = BACKEND_DIR.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.benchmark_cache import DEFAULT_CACHE_DIR, load_or_create_index
-from app.bm25_retriever import BM25Retriever
-from app.embedding import EmbeddingService
-from app.evaluation import (
+from app.evaluation.benchmark_cache import DEFAULT_CACHE_DIR, load_or_create_index
+from app.retrieval.bm25_retriever import BM25Retriever
+from app.retrieval.embedding import EmbeddingService
+from app.evaluation.metrics import (
     DatasetMetrics,
     evidence_element_ids,
     evaluate_ranked_groups,
     retrieval_element_groups_from_metadata,
     retrieval_element_ids_from_metadata,
 )
-from app.pdf_parser import parse_pdf
-from app.related_context import expand_related_figure_context
-from app.retriever import DEFAULT_MIN_SCORE, InMemoryRetriever
-from app.reranker import CrossEncoderReranker
-from app.rrf import fuse_parent_hits
+from app.documents.pdf_parser import parse_pdf
+from app.retrieval.related_context import expand_related_figure_context
+from app.retrieval.retriever import DEFAULT_MIN_SCORE, InMemoryRetriever
+from app.retrieval.reranker import CrossEncoderReranker
+from app.retrieval.rrf import fuse_parent_hits
 from app.config import Settings
-from app.hyde import HyDEGenerator
+from app.retrieval.hyde import HyDEGenerator
 
 
 logger = logging.getLogger(__name__)

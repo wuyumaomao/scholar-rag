@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from app.pdf_parser import ParsedElement, ParsedPdf
+from app.documents.pdf_parser import ParsedElement, ParsedPdf
 from scripts import evaluate_benchmark
 
 

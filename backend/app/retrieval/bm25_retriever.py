@@ -5,9 +5,9 @@ from math import log
 import re
 from typing import Sequence
 
-from app.chunker import Chunk
-from app.retriever import RetrievalHit
-from app.retrieval_filters import FilterInput, coerce_filters, matches_filters
+from app.documents.chunker import Chunk
+from app.retrieval.retriever import RetrievalHit
+from app.retrieval.retrieval_filters import FilterInput, coerce_filters, matches_filters
 
 
 _TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)

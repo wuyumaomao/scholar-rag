@@ -1,5 +1,5 @@
 from app.config import Settings
-from app.hyde import HyDEError, HyDEGenerator
+from app.retrieval.hyde import HyDEError, HyDEGenerator
 
 
 def test_hyde_generator_sends_question_to_openai_compatible_endpoint() -> None:

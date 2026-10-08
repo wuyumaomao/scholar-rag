@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from app.config import Settings
-from app.vlm import VLMConfig, VLMError, VisionService
+from app.retrieval.vlm import VLMConfig, VLMError, VisionService
 
 
 def test_vision_service_sends_image_as_openai_compatible_data_url(tmp_path: Path) -> None:

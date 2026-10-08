@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.bm25_retriever import BM25Retriever
-from app.chunker import Chunk
+from app.retrieval.bm25_retriever import BM25Retriever
+from app.documents.chunker import Chunk
 
 
 def make_chunk(chunk_id: str, context: str) -> Chunk:

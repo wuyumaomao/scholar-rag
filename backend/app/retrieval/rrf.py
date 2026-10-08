@@ -2,8 +2,8 @@
 
 from typing import Sequence
 
-from app.chunker import Chunk
-from app.retriever import RetrievalHit
+from app.documents.chunker import Chunk
+from app.retrieval.retriever import RetrievalHit
 
 
 def _best_parent_ranks(

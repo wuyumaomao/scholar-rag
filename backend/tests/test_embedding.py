@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.embedding import EmbeddingService
+from app.retrieval.embedding import EmbeddingService
 
 
 class FakeEmbeddingModel:

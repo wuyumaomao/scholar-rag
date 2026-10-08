@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from math import isfinite, sqrt
 from typing import Sequence
 
-from app.chunker import Chunk
-from app.retrieval_filters import FilterInput, coerce_filters, matches_filters
+from app.documents.chunker import Chunk
+from app.retrieval.retrieval_filters import FilterInput, coerce_filters, matches_filters
 
 
 DEFAULT_MIN_SCORE = 0.8

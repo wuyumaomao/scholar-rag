@@ -3,7 +3,7 @@
 import time
 from uuid import uuid4
 
-from app.database import get_connection
+from app.storage.database import get_connection
 
 
 def _session_from_row(row: tuple[object, ...]) -> dict[str, object]:

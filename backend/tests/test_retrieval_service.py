@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from app.chunker import Chunk
+from app.documents.chunker import Chunk
 from app.config import Settings
-from app.pdf_parser import ParsedElement, ParsedPdf, ParsedProvenance
-from app.retrieval_service import RetrievalService
-from app import retrieval_service as retrieval_service_module
-from app.hyde import HyDEError
+from app.documents.pdf_parser import ParsedElement, ParsedPdf, ParsedProvenance
+from app.retrieval.retrieval_service import RetrievalService
+import app.retrieval.retrieval_service as retrieval_service_module
+from app.retrieval.hyde import HyDEError
 
 
 class FakeEmbedder:

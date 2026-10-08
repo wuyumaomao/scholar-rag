@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from app.chunker import Chunk
-from app.related_context import expand_related_figure_context
-from app.retriever import RetrievalHit
+from app.documents.chunker import Chunk
+from app.retrieval.related_context import expand_related_figure_context
+from app.retrieval.retriever import RetrievalHit
 
 
 def test_related_figure_is_added_to_parent_context_without_a_new_ranked_result(
