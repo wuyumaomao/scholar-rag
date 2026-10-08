@@ -1,0 +1,620 @@
+{
+  "experiment": "dense retrieval k sweep",
+  "k_values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "benchmark_dir": "G:\\scholar-rag\\learning-implementation\\evaluation-dataset",
+  "pdf_dir": "C:\\Users\\93655\\Desktop\\paper",
+  "dataset_count": 7,
+  "case_count": 116,
+  "child_top_k": null,
+  "min_score": 0.7,
+  "retrieval_unit": "child embedding -> unique parent result -> source_element_ids scoring",
+  "k_zero_definition": "return no results; all metrics are 0",
+  "metrics_definition": {
+    "recall_at_k": "hit gold element IDs / gold element IDs",
+    "precision_at_k": "hit returned source element IDs / k",
+    "precision_returned": "hit returned source element IDs / returned source element IDs",
+    "mrr": "reciprocal rank of first gold hit, macro averaged"
+  },
+  "overall_by_k": {
+    "0": {
+      "case_count": 116,
+      "recall_at_k": 0.0,
+      "precision_at_k": 0.0,
+      "precision_returned": 0.0,
+      "mrr": 0.0
+    },
+    "1": {
+      "case_count": 116,
+      "recall_at_k": 0.30411877394636017,
+      "precision_at_k": 0.3620689655172414,
+      "precision_returned": 0.3620689655172414,
+      "mrr": 0.3620689655172414
+    },
+    "2": {
+      "case_count": 116,
+      "recall_at_k": 0.4102353585112206,
+      "precision_at_k": 0.27155172413793105,
+      "precision_returned": 0.27586206896551724,
+      "mrr": 0.4396551724137931
+    },
+    "3": {
+      "case_count": 116,
+      "recall_at_k": 0.454775588396278,
+      "precision_at_k": 0.20977011494252873,
+      "precision_returned": 0.22126436781609193,
+      "mrr": 0.45689655172413796
+    },
+    "4": {
+      "case_count": 116,
+      "recall_at_k": 0.5496031746031746,
+      "precision_at_k": 0.1961206896551724,
+      "precision_returned": 0.21264367816091956,
+      "mrr": 0.4849137931034483
+    },
+    "5": {
+      "case_count": 116,
+      "recall_at_k": 0.5668445539135194,
+      "precision_at_k": 0.16379310344827586,
+      "precision_returned": 0.1841954022988506,
+      "mrr": 0.49008620689655175
+    },
+    "6": {
+      "case_count": 116,
+      "recall_at_k": 0.5855227148330597,
+      "precision_at_k": 0.14367816091954022,
+      "precision_returned": 0.16724137931034483,
+      "mrr": 0.4915229885057471
+    },
+    "7": {
+      "case_count": 116,
+      "recall_at_k": 0.6106663929939792,
+      "precision_at_k": 0.13054187192118227,
+      "precision_returned": 0.15656814449917897,
+      "mrr": 0.4952175697865353
+    },
+    "8": {
+      "case_count": 116,
+      "recall_at_k": 0.6164135194307608,
+      "precision_at_k": 0.11637931034482758,
+      "precision_returned": 0.1442528735632184,
+      "mrr": 0.4952175697865353
+    }
+  },
+  "datasets": [
+    {
+      "benchmark_file": "1-s2.0-S2666379123005402-main.jsonl",
+      "source_pdf": "1-s2.0-S2666379123005402-main.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\1-s2.0-S2666379123005402-main.pdf",
+      "page_count": 22,
+      "element_count": 364,
+      "parent_count": 255,
+      "child_count": 383,
+      "case_count": 16,
+      "metrics_by_k": {
+        "0": {
+          "case_count": 16,
+          "recall_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "precision_returned": 0.0,
+          "mrr": 0.0
+        },
+        "1": {
+          "case_count": 16,
+          "recall_at_k": 0.25,
+          "precision_at_k": 0.3125,
+          "precision_returned": 0.3125,
+          "mrr": 0.3125
+        },
+        "2": {
+          "case_count": 16,
+          "recall_at_k": 0.375,
+          "precision_at_k": 0.21875,
+          "precision_returned": 0.25,
+          "mrr": 0.375
+        },
+        "3": {
+          "case_count": 16,
+          "recall_at_k": 0.40625,
+          "precision_at_k": 0.16666666666666666,
+          "precision_returned": 0.20833333333333331,
+          "mrr": 0.3958333333333333
+        },
+        "4": {
+          "case_count": 16,
+          "recall_at_k": 0.5625,
+          "precision_at_k": 0.171875,
+          "precision_returned": 0.21875,
+          "mrr": 0.4427083333333333
+        },
+        "5": {
+          "case_count": 16,
+          "recall_at_k": 0.5625,
+          "precision_at_k": 0.1375,
+          "precision_returned": 0.1875,
+          "mrr": 0.4427083333333333
+        },
+        "6": {
+          "case_count": 16,
+          "recall_at_k": 0.5625,
+          "precision_at_k": 0.11458333333333333,
+          "precision_returned": 0.16666666666666666,
+          "mrr": 0.4427083333333333
+        },
+        "7": {
+          "case_count": 16,
+          "recall_at_k": 0.5625,
+          "precision_at_k": 0.09821428571428571,
+          "precision_returned": 0.15178571428571427,
+          "mrr": 0.4427083333333333
+        },
+        "8": {
+          "case_count": 16,
+          "recall_at_k": 0.5625,
+          "precision_at_k": 0.0859375,
+          "precision_returned": 0.140625,
+          "mrr": 0.4427083333333333
+        }
+      }
+    },
+    {
+      "benchmark_file": "1710.11216v3.jsonl",
+      "source_pdf": "1710.11216v3.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\1710.11216v3.pdf",
+      "page_count": 10,
+      "element_count": 213,
+      "parent_count": 175,
+      "child_count": 219,
+      "case_count": 15,
+      "metrics_by_k": {
+        "0": {
+          "case_count": 15,
+          "recall_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "precision_returned": 0.0,
+          "mrr": 0.0
+        },
+        "1": {
+          "case_count": 15,
+          "recall_at_k": 0.4,
+          "precision_at_k": 0.4,
+          "precision_returned": 0.4,
+          "mrr": 0.4
+        },
+        "2": {
+          "case_count": 15,
+          "recall_at_k": 0.4666666666666667,
+          "precision_at_k": 0.23333333333333334,
+          "precision_returned": 0.23333333333333334,
+          "mrr": 0.43333333333333335
+        },
+        "3": {
+          "case_count": 15,
+          "recall_at_k": 0.4888888888888889,
+          "precision_at_k": 0.17777777777777776,
+          "precision_returned": 0.17777777777777776,
+          "mrr": 0.45555555555555555
+        },
+        "4": {
+          "case_count": 15,
+          "recall_at_k": 0.5555555555555556,
+          "precision_at_k": 0.15,
+          "precision_returned": 0.15,
+          "mrr": 0.4722222222222222
+        },
+        "5": {
+          "case_count": 15,
+          "recall_at_k": 0.5555555555555556,
+          "precision_at_k": 0.12000000000000001,
+          "precision_returned": 0.12000000000000001,
+          "mrr": 0.4722222222222222
+        },
+        "6": {
+          "case_count": 15,
+          "recall_at_k": 0.5555555555555556,
+          "precision_at_k": 0.1,
+          "precision_returned": 0.1,
+          "mrr": 0.4722222222222222
+        },
+        "7": {
+          "case_count": 15,
+          "recall_at_k": 0.5555555555555556,
+          "precision_at_k": 0.0857142857142857,
+          "precision_returned": 0.0857142857142857,
+          "mrr": 0.4722222222222222
+        },
+        "8": {
+          "case_count": 15,
+          "recall_at_k": 0.5555555555555556,
+          "precision_at_k": 0.075,
+          "precision_returned": 0.075,
+          "mrr": 0.4722222222222222
+        }
+      }
+    },
+    {
+      "benchmark_file": "Dense_Depth_Estimation_in_Monocular_Endoscopy_With_Self-Supervised_Learning_Methods.jsonl",
+      "source_pdf": "Dense_Depth_Estimation_in_Monocular_Endoscopy_With_Self-Supervised_Learning_Methods.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\Dense_Depth_Estimation_in_Monocular_Endoscopy_With_Self-Supervised_Learning_Methods.pdf",
+      "page_count": 10,
+      "element_count": 133,
+      "parent_count": 105,
+      "child_count": 170,
+      "case_count": 15,
+      "metrics_by_k": {
+        "0": {
+          "case_count": 15,
+          "recall_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "precision_returned": 0.0,
+          "mrr": 0.0
+        },
+        "1": {
+          "case_count": 15,
+          "recall_at_k": 0.43333333333333335,
+          "precision_at_k": 0.4666666666666667,
+          "precision_returned": 0.4666666666666667,
+          "mrr": 0.4666666666666667
+        },
+        "2": {
+          "case_count": 15,
+          "recall_at_k": 0.45555555555555555,
+          "precision_at_k": 0.26666666666666666,
+          "precision_returned": 0.26666666666666666,
+          "mrr": 0.5
+        },
+        "3": {
+          "case_count": 15,
+          "recall_at_k": 0.5555555555555556,
+          "precision_at_k": 0.2222222222222222,
+          "precision_returned": 0.24444444444444444,
+          "mrr": 0.5444444444444444
+        },
+        "4": {
+          "case_count": 15,
+          "recall_at_k": 0.6444444444444444,
+          "precision_at_k": 0.2,
+          "precision_returned": 0.2388888888888889,
+          "mrr": 0.5611111111111111
+        },
+        "5": {
+          "case_count": 15,
+          "recall_at_k": 0.6444444444444444,
+          "precision_at_k": 0.16000000000000003,
+          "precision_returned": 0.20888888888888887,
+          "mrr": 0.5611111111111111
+        },
+        "6": {
+          "case_count": 15,
+          "recall_at_k": 0.711111111111111,
+          "precision_at_k": 0.14444444444444443,
+          "precision_returned": 0.2,
+          "mrr": 0.5722222222222223
+        },
+        "7": {
+          "case_count": 15,
+          "recall_at_k": 0.7777777777777778,
+          "precision_at_k": 0.13333333333333333,
+          "precision_returned": 0.19365079365079366,
+          "mrr": 0.5817460317460318
+        },
+        "8": {
+          "case_count": 15,
+          "recall_at_k": 0.7777777777777778,
+          "precision_at_k": 0.11666666666666667,
+          "precision_returned": 0.18055555555555555,
+          "mrr": 0.5817460317460318
+        }
+      }
+    },
+    {
+      "benchmark_file": "depth_benchmark.jsonl",
+      "source_pdf": "depth.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\depth.pdf",
+      "page_count": 18,
+      "element_count": 240,
+      "parent_count": 192,
+      "child_count": 235,
+      "case_count": 19,
+      "metrics_by_k": {
+        "0": {
+          "case_count": 19,
+          "recall_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "precision_returned": 0.0,
+          "mrr": 0.0
+        },
+        "1": {
+          "case_count": 19,
+          "recall_at_k": 0.2017543859649123,
+          "precision_at_k": 0.3157894736842105,
+          "precision_returned": 0.3157894736842105,
+          "mrr": 0.3157894736842105
+        },
+        "2": {
+          "case_count": 19,
+          "recall_at_k": 0.36278195488721804,
+          "precision_at_k": 0.34210526315789475,
+          "precision_returned": 0.34210526315789475,
+          "mrr": 0.4473684210526316
+        },
+        "3": {
+          "case_count": 19,
+          "recall_at_k": 0.4505012531328321,
+          "precision_at_k": 0.2807017543859649,
+          "precision_returned": 0.2894736842105263,
+          "mrr": 0.48245614035087714
+        },
+        "4": {
+          "case_count": 19,
+          "recall_at_k": 0.5513784461152882,
+          "precision_at_k": 0.2631578947368421,
+          "precision_returned": 0.2807017543859649,
+          "mrr": 0.4956140350877193
+        },
+        "5": {
+          "case_count": 19,
+          "recall_at_k": 0.568922305764411,
+          "precision_at_k": 0.2210526315789474,
+          "precision_returned": 0.24385964912280703,
+          "mrr": 0.4956140350877193
+        },
+        "6": {
+          "case_count": 19,
+          "recall_at_k": 0.5820802005012532,
+          "precision_at_k": 0.19298245614035087,
+          "precision_returned": 0.21929824561403505,
+          "mrr": 0.4956140350877193
+        },
+        "7": {
+          "case_count": 19,
+          "recall_at_k": 0.5820802005012532,
+          "precision_at_k": 0.16541353383458646,
+          "precision_returned": 0.19423558897243107,
+          "mrr": 0.4956140350877193
+        },
+        "8": {
+          "case_count": 19,
+          "recall_at_k": 0.599624060150376,
+          "precision_at_k": 0.1513157894736842,
+          "precision_returned": 0.18201754385964913,
+          "mrr": 0.4956140350877193
+        }
+      }
+    },
+    {
+      "benchmark_file": "fmisnet-4.jsonl",
+      "source_pdf": "FMISNet(4).pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\FMISNet(4).pdf",
+      "page_count": 26,
+      "element_count": 262,
+      "parent_count": 209,
+      "child_count": 283,
+      "case_count": 16,
+      "metrics_by_k": {
+        "0": {
+          "case_count": 16,
+          "recall_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "precision_returned": 0.0,
+          "mrr": 0.0
+        },
+        "1": {
+          "case_count": 16,
+          "recall_at_k": 0.28125,
+          "precision_at_k": 0.3125,
+          "precision_returned": 0.3125,
+          "mrr": 0.3125
+        },
+        "2": {
+          "case_count": 16,
+          "recall_at_k": 0.40625,
+          "precision_at_k": 0.25,
+          "precision_returned": 0.25,
+          "mrr": 0.40625
+        },
+        "3": {
+          "case_count": 16,
+          "recall_at_k": 0.40625,
+          "precision_at_k": 0.16666666666666666,
+          "precision_returned": 0.16666666666666666,
+          "mrr": 0.40625
+        },
+        "4": {
+          "case_count": 16,
+          "recall_at_k": 0.578125,
+          "precision_at_k": 0.1875,
+          "precision_returned": 0.1875,
+          "mrr": 0.453125
+        },
+        "5": {
+          "case_count": 16,
+          "recall_at_k": 0.640625,
+          "precision_at_k": 0.1625,
+          "precision_returned": 0.16875,
+          "mrr": 0.465625
+        },
+        "6": {
+          "case_count": 16,
+          "recall_at_k": 0.640625,
+          "precision_at_k": 0.13541666666666666,
+          "precision_returned": 0.14791666666666667,
+          "mrr": 0.465625
+        },
+        "7": {
+          "case_count": 16,
+          "recall_at_k": 0.640625,
+          "precision_at_k": 0.11607142857142856,
+          "precision_returned": 0.13452380952380952,
+          "mrr": 0.465625
+        },
+        "8": {
+          "case_count": 16,
+          "recall_at_k": 0.640625,
+          "precision_at_k": 0.1015625,
+          "precision_returned": 0.12447916666666667,
+          "mrr": 0.465625
+        }
+      }
+    },
+    {
+      "benchmark_file": "ozyoruk2021.jsonl",
+      "source_pdf": "ozyoruk2021.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\ozyoruk2021.pdf",
+      "page_count": 26,
+      "element_count": 363,
+      "parent_count": 282,
+      "child_count": 383,
+      "case_count": 20,
+      "metrics_by_k": {
+        "0": {
+          "case_count": 20,
+          "recall_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "precision_returned": 0.0,
+          "mrr": 0.0
+        },
+        "1": {
+          "case_count": 20,
+          "recall_at_k": 0.27222222222222225,
+          "precision_at_k": 0.35,
+          "precision_returned": 0.35,
+          "mrr": 0.35
+        },
+        "2": {
+          "case_count": 20,
+          "recall_at_k": 0.3763888888888889,
+          "precision_at_k": 0.275,
+          "precision_returned": 0.275,
+          "mrr": 0.425
+        },
+        "3": {
+          "case_count": 20,
+          "recall_at_k": 0.39305555555555555,
+          "precision_at_k": 0.2,
+          "precision_returned": 0.2,
+          "mrr": 0.425
+        },
+        "4": {
+          "case_count": 20,
+          "recall_at_k": 0.42638888888888893,
+          "precision_at_k": 0.175,
+          "precision_returned": 0.175,
+          "mrr": 0.45
+        },
+        "5": {
+          "case_count": 20,
+          "recall_at_k": 0.45972222222222225,
+          "precision_at_k": 0.16,
+          "precision_returned": 0.16,
+          "mrr": 0.47000000000000003
+        },
+        "6": {
+          "case_count": 20,
+          "recall_at_k": 0.48888888888888893,
+          "precision_at_k": 0.15,
+          "precision_returned": 0.15,
+          "mrr": 0.47000000000000003
+        },
+        "7": {
+          "case_count": 20,
+          "recall_at_k": 0.5430555555555555,
+          "precision_at_k": 0.15,
+          "precision_returned": 0.15,
+          "mrr": 0.47714285714285715
+        },
+        "8": {
+          "case_count": 20,
+          "recall_at_k": 0.5597222222222222,
+          "precision_at_k": 0.1375,
+          "precision_returned": 0.1375,
+          "mrr": 0.47714285714285715
+        }
+      }
+    },
+    {
+      "benchmark_file": "PHY2-4-e12893.jsonl",
+      "source_pdf": "PHY2-4-e12893.pdf",
+      "pdf_path": "C:\\Users\\93655\\Desktop\\paper\\PHY2-4-e12893.pdf",
+      "page_count": 13,
+      "element_count": 159,
+      "parent_count": 118,
+      "child_count": 188,
+      "case_count": 15,
+      "metrics_by_k": {
+        "0": {
+          "case_count": 15,
+          "recall_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "precision_returned": 0.0,
+          "mrr": 0.0
+        },
+        "1": {
+          "case_count": 15,
+          "recall_at_k": 0.3333333333333333,
+          "precision_at_k": 0.4,
+          "precision_returned": 0.4,
+          "mrr": 0.4
+        },
+        "2": {
+          "case_count": 15,
+          "recall_at_k": 0.45555555555555555,
+          "precision_at_k": 0.3,
+          "precision_returned": 0.3,
+          "mrr": 0.5
+        },
+        "3": {
+          "case_count": 15,
+          "recall_at_k": 0.5111111111111112,
+          "precision_at_k": 0.24444444444444444,
+          "precision_returned": 0.25555555555555554,
+          "mrr": 0.5
+        },
+        "4": {
+          "case_count": 15,
+          "recall_at_k": 0.5666666666666667,
+          "precision_at_k": 0.21666666666666667,
+          "precision_returned": 0.23333333333333334,
+          "mrr": 0.5333333333333333
+        },
+        "5": {
+          "case_count": 15,
+          "recall_at_k": 0.5666666666666667,
+          "precision_at_k": 0.17333333333333334,
+          "precision_returned": 0.19333333333333336,
+          "mrr": 0.5333333333333333
+        },
+        "6": {
+          "case_count": 15,
+          "recall_at_k": 0.5888888888888889,
+          "precision_at_k": 0.15555555555555553,
+          "precision_returned": 0.18,
+          "mrr": 0.5333333333333333
+        },
+        "7": {
+          "case_count": 15,
+          "recall_at_k": 0.6444444444444444,
+          "precision_at_k": 0.15238095238095237,
+          "precision_returned": 0.18,
+          "mrr": 0.5428571428571428
+        },
+        "8": {
+          "case_count": 15,
+          "recall_at_k": 0.6444444444444444,
+          "precision_at_k": 0.13333333333333333,
+          "precision_returned": 0.16333333333333336,
+          "mrr": 0.5428571428571428
+        }
+      }
+    }
+  ]
+}

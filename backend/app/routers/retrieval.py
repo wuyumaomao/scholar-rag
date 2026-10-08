@@ -6,13 +6,15 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
+from app.config import Settings
 from app.retrieval_service import RetrievalService
 from app.store import get_file
 
 router = APIRouter(prefix="/api/retrieve", tags=["retrieval"])
 UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"
 FIGURE_DIR = Path(__file__).resolve().parents[2] / "data" / "figures"
-retrieval_service = RetrievalService()
+settings = Settings.from_env()
+retrieval_service = RetrievalService(settings=settings)
 
 
 def invalidate_retrieval_index(file_id: str) -> None:
@@ -25,8 +27,9 @@ class RetrieveRequest(BaseModel):
 
     file_id: str = Field(min_length=1)
     query: str = Field(min_length=1)
-    top_k: int = Field(default=5, ge=1, le=50)
-    child_top_k: int | None = Field(default=None, ge=1, le=200)
+    top_k: int = Field(default=settings.top_k, ge=1, le=50)
+    child_top_k: int = Field(default=settings.fetch_k, ge=1, le=200)
+    min_score: float = Field(default=settings.min_score, ge=-1, le=1)
 
     @field_validator("query")
     @classmethod
@@ -56,6 +59,7 @@ async def retrieve(request: RetrieveRequest) -> dict[str, list[dict[str, object]
             FIGURE_DIR / request.file_id,
             top_k=request.top_k,
             child_top_k=request.child_top_k,
+            min_score=request.min_score,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

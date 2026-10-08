@@ -41,6 +41,27 @@ def test_search_limits_results_to_available_chunks() -> None:
     assert hits[0].chunk.chunk_id == "only"
 
 
+def test_search_filters_results_below_default_similarity_threshold() -> None:
+    chunks = [make_chunk("high"), make_chunk("medium"), make_chunk("low")]
+    retriever = InMemoryRetriever(
+        chunks,
+        [[1.0, 0.0], [0.8, 0.6], [0.6, 0.8]],
+    )
+
+    hits = retriever.search([1.0, 0.0], top_k=5)
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["high", "medium"]
+    assert all(hit.score >= 0.7 for hit in hits)
+
+
+def test_search_can_return_no_results_when_threshold_is_too_high() -> None:
+    retriever = InMemoryRetriever([make_chunk("only")], [[1.0, 0.0]])
+
+    hits = retriever.search([1.0, 0.0], top_k=5, min_score=1.01)
+
+    assert hits == []
+
+
 def test_constructor_rejects_mismatched_chunks_and_vectors() -> None:
     with pytest.raises(ValueError, match="数量"):
         InMemoryRetriever([make_chunk("one")], [])

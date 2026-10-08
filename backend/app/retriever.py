@@ -7,6 +7,9 @@ from typing import Sequence
 from app.chunker import Chunk
 
 
+DEFAULT_MIN_SCORE = 0.8
+
+
 @dataclass(frozen=True)
 class RetrievalHit:
     """A retrieved chunk and its cosine similarity to the query."""
@@ -60,10 +63,13 @@ class InMemoryRetriever:
         *,
         child_top_k: int | None = None,
         expand_parents: bool = False,
+        min_score: float = DEFAULT_MIN_SCORE,
     ) -> list[RetrievalHit]:
         """Search children, optionally returning unique parent chunks.
 
-        ``top_k`` is the final result count. When ``expand_parents`` is true,
+        ``top_k`` is the maximum final result count. Results below ``min_score``
+        are discarded, so fewer than ``top_k`` results may be returned. When
+        ``expand_parents`` is true,
         ``child_top_k`` controls how many child candidates are considered before
         duplicate parents are removed; by default it considers twice ``top_k``.
         """
@@ -71,6 +77,8 @@ class InMemoryRetriever:
             raise ValueError("top_k 必须大于 0")
         if child_top_k is not None and child_top_k <= 0:
             raise ValueError("child_top_k 必须大于 0")
+        if not isfinite(min_score):
+            raise ValueError("min_score 必须是有限数字")
         if expand_parents and self._parents_by_id is None:
             raise ValueError("展开 parent 需要传入 parents")
 
@@ -90,8 +98,9 @@ class InMemoryRetriever:
         scored.sort(key=lambda item: (-item[1], item[0]))
         child_hits = [
             RetrievalHit(chunk=self._chunks[index], score=score)
-            for index, score in scored[: self._candidate_limit(top_k, child_top_k, expand_parents)]
-        ]
+            for index, score in scored
+            if score >= min_score
+        ][: self._candidate_limit(top_k, child_top_k, expand_parents)]
         if not expand_parents:
             return child_hits[:top_k]
         return self._expand_to_parents(child_hits, top_k)

@@ -1,21 +1,32 @@
 """Build and query an in-memory retrieval index for uploaded PDFs."""
 
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, replace
+import logging
 from pathlib import Path
 from threading import RLock
 from typing import Callable
 
 from app.chunker import Chunk, create_chunks
+from app.bm25_retriever import BM25Retriever
+from app.config import Settings
 from app.embedding import EmbeddingService
 from app.pdf_parser import ParsedPdf, parse_pdf
 from app.retriever import InMemoryRetriever, RetrievalHit
+from app.reranker import CrossEncoderReranker
+from app.rrf import fuse_parent_hits
+from app.vlm import VLMError, VisionService
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class _CachedIndex:
     file_signature: tuple[int, int]
     parents: list[Chunk]
-    retriever: InMemoryRetriever | None
+    dense_retriever: InMemoryRetriever | None
+    bm25_retriever: BM25Retriever | None
 
 
 class RetrievalService:
@@ -26,9 +37,23 @@ class RetrievalService:
         *,
         embedder: EmbeddingService | None = None,
         parser: Callable[..., ParsedPdf] = parse_pdf,
+        vision_service: VisionService | None = None,
+        reranker: CrossEncoderReranker | None = None,
+        settings: Settings | None = None,
     ) -> None:
-        self._embedder = embedder or EmbeddingService()
+        if vision_service is not None and settings is not None:
+            # An injected vision service already owns its configuration.
+            # Accepting both would make the source of truth ambiguous.
+            raise ValueError("vision_service 和 settings 不能同时传入")
+        self._settings = settings or Settings.from_env()
+        self._embedder = embedder or EmbeddingService(settings=self._settings)
         self._parser = parser
+        self._vision_service = vision_service or VisionService(settings=self._settings)
+        self._reranker = reranker
+        if self._reranker is None and self._settings.reranker_enabled:
+            self._reranker = CrossEncoderReranker(
+                model_name=self._settings.reranker_model
+            )
         self._indexes: dict[str, _CachedIndex] = {}
         self._lock = RLock()
 
@@ -39,27 +64,88 @@ class RetrievalService:
         query: str,
         figure_dir: Path,
         *,
-        top_k: int = 5,
+        top_k: int | None = None,
         child_top_k: int | None = None,
+        min_score: float | None = None,
     ) -> list[RetrievalHit]:
         """Return unique parent hits for a query over one uploaded PDF."""
+        resolved_top_k = self._settings.top_k if top_k is None else top_k
+        resolved_child_top_k = (
+            self._settings.fetch_k if child_top_k is None else child_top_k
+        )
+        resolved_min_score = (
+            self._settings.min_score if min_score is None else min_score
+        )
         if not query.strip():
             raise ValueError("query 不能为空")
-        if top_k <= 0:
+        if resolved_top_k <= 0:
             raise ValueError("top_k 必须大于 0")
-        if child_top_k is not None and child_top_k <= 0:
+        if resolved_child_top_k <= 0:
             raise ValueError("child_top_k 必须大于 0")
 
         index = self._get_index(file_id, pdf_path, figure_dir)
-        if index.retriever is None:
+        if index.dense_retriever is None or index.bm25_retriever is None:
             return []
 
-        return index.retriever.search(
+        dense_hits = index.dense_retriever.search(
             self._embedder.embed_query(query),
-            top_k=top_k,
-            child_top_k=child_top_k,
-            expand_parents=True,
+            top_k=resolved_child_top_k,
+            min_score=resolved_min_score,
         )
+        bm25_hits = index.bm25_retriever.search(
+            query,
+            top_k=resolved_child_top_k,
+        )
+        parent_candidate_k = resolved_top_k
+        if self._reranker is not None:
+            parent_candidate_k = max(
+                resolved_top_k, self._settings.rerank_candidate_k
+            )
+        hits = fuse_parent_hits(
+            dense_hits,
+            bm25_hits,
+            index.parents,
+            top_k=parent_candidate_k,
+            rrf_k=self._settings.rrf_k,
+        )
+        if self._reranker is not None:
+            hits = self._reranker.rerank(query, hits, top_k=resolved_top_k)
+        return self._enrich_figure_hits(hits)
+
+    def _enrich_figure_hits(self, hits: list[RetrievalHit]) -> list[RetrievalHit]:
+        """Add best-effort VLM descriptions to retrieved figure parents."""
+        enriched: list[RetrievalHit] = []
+        for hit in hits:
+            metadata = hit.chunk.meta
+            image_path = metadata.get("image_path")
+            element_types = metadata.get("element_types", [])
+            if not image_path or "figure" not in element_types:
+                enriched.append(hit)
+                continue
+
+            caption = hit.chunk.context.removeprefix("Figure:").strip()
+            try:
+                description = self._vision_service.describe_image(Path(str(image_path)), caption)
+            except (OSError, VLMError) as exc:
+                logger.warning("VLM figure description skipped for %s: %s", image_path, exc)
+                enriched.append(hit)
+                continue
+            if not description:
+                enriched.append(hit)
+                continue
+
+            enriched_metadata = deepcopy(metadata)
+            enriched_metadata["image_description"] = description
+            enriched_context = (
+                f"{hit.chunk.context}\n\nImage description: {description}"
+            )
+            enriched_chunk = replace(
+                hit.chunk,
+                context=enriched_context,
+                meta=enriched_metadata,
+            )
+            enriched.append(replace(hit, chunk=enriched_chunk))
+        return enriched
 
     def invalidate(self, file_id: str) -> None:
         """Remove a deleted or replaced PDF's in-memory index."""
@@ -76,21 +162,23 @@ class RetrievalService:
 
             parsed_pdf = self._parser(pdf_path, figure_dir=figure_dir)
             chunking = create_chunks(parsed_pdf)
-            retriever = None
+            dense_retriever = None
+            bm25_retriever = None
             if chunking.children:
                 vectors = self._embedder.embed_texts(
                     [chunk.context for chunk in chunking.children]
                 )
-                retriever = InMemoryRetriever(
+                dense_retriever = InMemoryRetriever(
                     chunking.children,
                     vectors,
-                    parents=chunking.parents,
                 )
+                bm25_retriever = BM25Retriever(chunking.children)
 
             index = _CachedIndex(
                 file_signature=signature,
                 parents=chunking.parents,
-                retriever=retriever,
+                dense_retriever=dense_retriever,
+                bm25_retriever=bm25_retriever,
             )
             self._indexes[file_id] = index
             return index

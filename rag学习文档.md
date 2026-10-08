@@ -613,9 +613,49 @@ cd learning-implementation\backend
 ..\.venv\Scripts\python.exe -c "from app.pdf_parser import parse_pdf; from app.chunker import create_chunks; from app.embedding import EmbeddingService; from app.retriever import InMemoryRetriever; r=parse_pdf('../1710.11216v3.pdf'); c=create_chunks(r).children; e=EmbeddingService(); vs=e.embed_texts([x.context for x in c]); hits=InMemoryRetriever(c,vs).search(e.embed_query('How is depth estimated from endoscopy images?'),top_k=3); [print(h.score, h.chunk.chunk_id, h.chunk.context[:160].replace(chr(10), ' ')) for h in hits]"
 ```
 
+#### 本地 BM25 child 检索
+
+向量检索按语义相似度排序，BM25 按词项是否出现在文本中排序。学习版的 `backend/app/bm25_retriever.py` 在内存中实现 Okapi BM25：先把 child 文本和 query 转成小写词元，再根据词频、逆文档频率和文档长度计算分数。BM25 本身只返回 child；在 RRF 融合阶段，会把 dense 和 BM25 的 child 排名分别映射到 parent，并去除重复 parent。
+
+```python
+from app.bm25_retriever import BM25Retriever
+
+bm25 = BM25Retriever(chunk_result.children)
+hits = bm25.search("How is depth estimated from endoscopy images?", top_k=20)
+for hit in hits:
+    print(hit.score, hit.chunk.chunk_id, hit.chunk.context[:160])
+```
+
+BM25 的分数和 cosine 分数不是同一种量纲，所以不能直接把两者相加。混合检索时只使用它们各自的排名，通过 RRF 融合；`top_k=20` 表示先保留 20 个 child 候选，最终 parent 数量由后续融合阶段决定。
+
+#### Parent 去重与 RRF 融合
+
+Dense 和 BM25 都返回 child，但同一个 parent 可能包含多个 child。如果直接合并 child，会让一个 parent 因为命中多个 child 而重复出现。因此 `backend/app/rrf.py` 先在每个检索通道内部按 `parent_chunk_id` 分组，只保留该 parent 的最佳排名，再使用 Reciprocal Rank Fusion：
+
+```text
+RRF(parent) = 1 / (rrf_k + dense_rank)
+            + 1 / (rrf_k + bm25_rank)
+```
+
+学习版的 `fuse_parent_hits()` 默认使用 `rrf_k=60`，输入 Dense 和 BM25 的 child 命中以及 parent 列表，输出去重后的 parent 命中。某个 parent 只在一个通道出现时只获得一项分数；两个通道都出现时会累加两项分数。默认可以先取 `top_k=10`，再交给 Cross-Encoder 做精排。
+
 #### 本地检索 API
 
-`POST /api/retrieve` 把“解析 PDF → 创建 parent/child → 生成 child 向量 → Top-k 检索 → 展开并去重 parent”组合为一个 HTTP 请求。请求必须提供已上传 PDF 的 `file_id` 和非空 `query`，可以用 `top_k` 设置最终返回的 parent 数量，用 `child_top_k` 设置 parent 展开前考察的 child 候选数。响应中的每项包含 `chunk_id`、`score`、`context` 和 `metadata`；figure parent 的 metadata 也会包含 `image_path`。
+`POST /api/retrieve` 将 Dense 与 BM25 混合检索接入主流程：
+
+```text
+解析 PDF → 创建 parent/child → 建立 Dense 向量索引和 BM25 索引
+                                  ↓
+查询时：Dense child top fetch_k + BM25 child top fetch_k
+                                  ↓
+各通道按 parent 去重 → RRF 融合 →（可选 Cross-Encoder 重排）
+                                  ↓
+返回 top_k parent → VLM 图片增强
+```
+
+请求必须提供已上传 PDF 的 `file_id` 和非空 `query`。`child_top_k`（默认配置项 `FETCH_K=20`）控制 Dense 和 BM25 各自最多取多少个 child 候选；`top_k`（默认 `TOP_K=5`）控制融合后最多返回多少个 parent。当前默认 `MIN_SCORE=0.8`，只过滤 Dense 候选；BM25 候选独立参与融合，因此即使某个 parent 的 Dense 分数低于阈值，它仍可能通过 BM25 被召回。`RRF_K` 控制倒数排名融合的平滑参数。默认值集中在 `Settings`，可由环境变量或单次请求显式覆盖。
+
+默认关闭 Cross-Encoder 时，响应中的 `score` 是 RRF 融合分数，不再是 cosine 相似度；不同查询的 RRF 分数也不适合直接当作概率比较。启用重排后，`score` 是 Cross-Encoder 输出的相关性分数，同样不是概率，且它和 RRF 分数不在同一量纲。响应还包含 `chunk_id`、`context` 和 `metadata`；figure parent 的 metadata 会包含 `image_path`，随后继续执行 VLM 图片描述增强。
 
 第一次查询某个 PDF 时，服务会解析并向量化整份文件，因此可能需要等待 Docling 和 embedding 模型完成加载；后续查询复用进程内缓存。服务重启后缓存会消失，并在下次查询时重新构建。当前还没有把 parent、child 或向量持久化到 Milvus/PostgreSQL。
 
@@ -628,10 +668,171 @@ curl.exe -X POST "http://127.0.0.1:8100/api/files/upload" -F "file=@G:\scholar-r
 从响应中复制 `file_id`，再查询（把示例 ID 替换成实际返回值）：
 
 ```cmd
-curl.exe -X POST "http://127.0.0.1:8100/api/retrieve" -H "Content-Type: application/json" -d "{\"file_id\":\"替换为上传响应中的file_id\",\"query\":\"How is depth estimated from endoscopy images?\",\"top_k\":3,\"child_top_k\":6}"
+curl.exe -X POST "http://127.0.0.1:8100/api/retrieve" -H "Content-Type: application/json" -d "{\"file_id\":\"替换为上传响应中的file_id\",\"query\":\"How is depth estimated from endoscopy images?\",\"top_k\":5,\"child_top_k\":6,\"min_score\":0.8}"
 ```
 
-应看到三个按分数降序排列的 child。由于这是英文论文和通用 Embedding 模型，先观察结果是否落在 depth estimation 相关段落，不要把一次 Top-k 输出当成正式评测结论。
+应看到最多三个按排序分数排列的 parent 结果。由于这是英文论文和通用 Embedding 模型，先观察结果是否落在 depth estimation 相关段落，不要把一次 Top-k 输出当成正式评测结论。
+
+#### 检索基线评测：Recall@k、Precision@k 和 MRR
+
+单次查询只能看到几个结果，不能说明检索器整体好不好。因此用 `evaluation-dataset\` 中的 JSONL benchmark 做批量评测。每条数据有一个英文问题和一组 gold `element_ids`；runner 把检索返回的 parent metadata 中的 `source_element_ids` 与 gold 对齐。多个 child 如果展开成同一个 parent，只计一次。
+
+三个指标的定义是：
+
+```text
+Recall@k    Top-k 命中的 gold element 数 / gold element 总数
+Precision@k Top-k 命中的结果数 / k
+Precision@returned 实际返回的结果中命中的结果数 / 实际返回结果数
+MRR         Top-k 内第一个命中 gold 的排名倒数，再对所有问题取平均
+```
+
+评测脚本支持 `--retrieval-mode dense`、`hybrid` 和 `hybrid-rerank`。第三种模式先用 Dense + BM25 + RRF 选出 parent 候选，再用 Cross-Encoder 对候选逐个评分、重新排序，最终只返回前 `k` 个。默认候选数由 `RERANK_CANDIDATE_K=10` 控制；模型由 `RERANKER_MODEL` 指定，学习版默认使用较小的英文模型 `cross-encoder/ms-marco-MiniLM-L-6-v2`。为了公平比较，模式之间使用相同 benchmark、PDF、`k`、child 候选数和 `min_score`。Dense 模式保留旧基线；Hybrid 的 `RRF_K` 默认从配置读取。例如，对 7 篇论文、116 个问题运行三组对照：
+
+```cmd
+cd learning-implementation\backend
+..\.venv\Scripts\python.exe scripts\evaluate_benchmark.py --retrieval-mode dense --pdf-dir C:\Users\93655\Desktop\paper --k 5 --child-top-k 20 --min-score 0.7 --output ..\evaluation-results-dense-comparison.json
+..\.venv\Scripts\python.exe scripts\evaluate_benchmark.py --retrieval-mode hybrid --pdf-dir C:\Users\93655\Desktop\paper --k 5 --child-top-k 20 --min-score 0.7 --rrf-k 60 --output ..\evaluation-results-hybrid.json
+..\.venv\Scripts\python.exe scripts\evaluate_benchmark.py --retrieval-mode hybrid-rerank --pdf-dir C:\Users\93655\Desktop\paper --k 5 --child-top-k 20 --min-score 0.7 --rrf-k 60 --rerank-candidate-k 10 --output ..\evaluation-results-hybrid-rerank.json
+```
+
+第一次运行 `hybrid-rerank` 需要下载 Cross-Encoder 权重；模型会在进程内复用，不会为每篇论文重新加载。API 在线启用时，在 `backend/.env` 设置 `RERANKER_ENABLED=true` 和 `RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2`，可选设置 `RERANK_CANDIDATE_K=10`，然后重启后端。候选 parent 少于 10 个时会全部参与重排。Cross-Encoder 只改变这批候选的顺序，不能找回未进入 RRF 候选集的 parent。
+
+结果分别写入两个 JSON 文件，不会覆盖此前保存的 baseline。2026-10-07 使用 7 篇论文、116 个问题运行得到：
+
+| 指标 | Dense | Dense + BM25 + RRF |
+|---|---:|---:|
+| Recall@5 | 0.6035 | 0.7151 |
+| Precision@5 | 0.1776 | 0.2155 |
+| Precision@returned | 0.1989 | 0.2155 |
+| MRR | 0.5289 | 0.6467 |
+
+使用本地 `cross-encoder/ms-marco-MiniLM-L-6-v2`，在 RRF 后保留 10 个 parent 候选并重排，得到第三组结果：
+
+| 指标 | Dense | Dense + BM25 + RRF | Hybrid + Cross-Encoder |
+|---|---:|---:|---:|
+| Recall@5 | 0.6035 | 0.7151 | 0.7762 |
+| Precision@5 | 0.1776 | 0.2155 | 0.2397 |
+| Precision@returned | 0.1989 | 0.2155 | 0.2397 |
+| MRR | 0.5289 | 0.6467 | 0.7228 |
+
+这批数据上 Hybrid 的四项指标都高于 Dense，Cross-Encoder 重排后继续提升了四项指标，说明它改善了已经召回的 parent 候选顺序。它不能找回没有进入 RRF 候选池的 parent。当前 benchmark 以正向可回答问题为主，且 BM25 使用简单英文词元化；这些结果适合用作学习项目的阶段性对照，不代表不可答问题上的拒答能力。
+
+#### 阈值和 top_k 对照
+
+为了观察“只返回高于相似度阈值的结果”与最终返回数量之间的取舍，固定 `min_score=0.80`，并让最终 `top_k` 从 3 到 8 逐组运行。其他参数保持不变：`child_top_k=20`、`rrf_k=60`、`rerank_candidate_k=10`，检索模式为 `hybrid-rerank`，数据集为 7 篇论文的 116 个问题。
+
+| top_k | Recall@k | Precision@k | Precision@returned | MRR |
+|---:|---:|---:|---:|---:|
+| 3 | 0.6739 | 0.3333 | 0.3333 | 0.6882 |
+| 4 | 0.7163 | 0.2716 | 0.2716 | 0.6925 |
+| 5 | 0.7565 | 0.2310 | 0.2310 | 0.7011 |
+| 6 | 0.7781 | 0.1983 | 0.1983 | 0.7040 |
+| 7 | 0.7893 | 0.1749 | 0.1749 | 0.7065 |
+| 8 | 0.8013 | 0.1562 | 0.1562 | 0.7076 |
+
+这组结果说明，`top_k` 越大，系统覆盖到正确 evidence 的机会越高，但同时会带回更多无关 parent。面试项目采用 `top_k=5` 作为默认平衡点；如果更强调上下文精简和结果准确率，可以单次请求设为 `top_k=3` 或 `4`；如果更强调召回覆盖，可以设为 `top_k=6`。当前默认 `min_score=0.80` 只控制 Dense 候选，BM25 候选仍可独立进入 RRF，因此它不是“最终结果分数必须大于 0.80”的硬过滤。结果文件分别为 `evaluation-results-rerank-score080-top3.json` 到 `evaluation-results-rerank-score080-top8.json`。
+
+#### Figure parent 与图注 element 的映射
+
+图片本身没有可用于文本 embedding 的正文，所以 chunker 会把 figure 的图注文字合并到 figure parent 的 `context` 中。例如 Figure 5 的结构化元素是：`element-000065`（图片）关联 `element-000066`（图注）。因此生成的 `element-000065-parent` 仍然只有一个检索结果，但 metadata 会记录：
+
+```json
+{
+  "source_element_ids": ["element-000065"],
+  "context_element_ids": ["element-000065", "element-000066"]
+}
+```
+
+`source_element_ids` 用来说明 parent 的主要来源，`context_element_ids` 用来说明这个 parent 的文字上下文还包含哪些结构化元素。评测按 parent 计排名和 Precision；判断是否命中 gold evidence 时再检查整个 `context_element_ids` 组。这样 q006 的 gold 图注 `element-000066` 可以由第 2 名的 `element-000065-parent` 命中，同时不会把图片和图注错误地算成两个返回结果。benchmark 仍保存原始 Docling evidence ID，不直接改成 chunk ID。
+
+#### 统一模型配置
+
+模型配置集中在 `backend/app/config.py` 的 `Settings` 中。它负责加载 `backend/.env` 和进程环境变量，并进行类型校验；它不负责加载模型或发送请求，`EmbeddingService`、`VisionService` 等服务通过配置获得模型名和 API 参数。
+
+```text
+环境变量
+    ↓
+Settings.from_env()
+    ↓
+EmbeddingService / VisionService / 后续 Reranker、LLM 服务
+```
+
+当前集中管理的配置包括：
+
+```text
+EMBEDDING_MODEL       向量模型
+RERANKER_ENABLED      是否启用模型重排
+RERANKER_MODEL        重排模型
+RERANK_CANDIDATE_K    RRF 后交给重排模型的 parent 候选数
+FETCH_K               每个检索通道先保留的候选数量
+TOP_K                 最终返回的 parent 数量上限
+MIN_SCORE             Dense 余弦相似度最低阈值
+RRF_K                 RRF 算法参数，不是模型
+LLM_BASE_URL          生成模型 API 地址
+LLM_MODEL             生成模型 ID
+LLM_API_KEY           生成模型密钥
+VLM_ENABLED           是否启用图片描述
+VLM_BASE_URL          远程视觉模型 API 地址
+VLM_MODEL             视觉模型 ID，例如服务商提供的 GPT 视觉模型
+VLM_API_KEY           视觉模型密钥
+```
+
+例如远程服务商提供 GPT 视觉模型时，只需要配置：
+
+```cmd
+set VLM_ENABLED=true
+set VLM_BASE_URL=https://服务商域名/v1
+set VLM_MODEL=服务商返回的视觉模型ID
+set VLM_API_KEY=服务商API_KEY
+```
+
+`VLM_MODEL` 可以是 GPT，只要该模型支持图片输入，并且服务商兼容 OpenAI 的多模态 `chat/completions` 请求。本地开发时编辑 `backend/.env`；模板在 `backend/.env.example`。进程环境变量会覆盖 `.env` 中的同名值，因此也可以用 CMD 临时覆盖配置。API Key 不写进 Python 源码，也不提交到 Git。
+
+`Settings.from_env()` 默认读取学习版 backend 目录下的 `.env`；测试可以传入临时 `env_path`，或使用 `load_dotenv_file=False`，这样不会受到本机真实密钥的影响。`.env.example` 默认关闭 VLM，复制模板后必须明确填写服务地址、模型 ID，并把 `VLM_ENABLED` 改为 `true` 才会发起远程请求。检索 API 的 `top_k`、`child_top_k` 和 `min_score` 默认值也来自同一个 `Settings` 实例，避免路由和服务使用两套参数。
+
+#### Figure 图片描述与 VLM
+
+图片本身没有可直接用于文本 embedding 的内容，但 figure parent 的 metadata 会保存 `image_path`。学习版现在由后端直接读取这个路径，把图片编码成 base64，并调用 OpenAI 兼容的 `/chat/completions` 接口生成图片描述；前端不参与这个过程。
+
+```text
+检索命中 figure parent
+        ↓
+读取 image_path
+        ↓
+后端调用 VLM
+        ↓
+生成 image_description
+        ↓
+追加到 parent context
+        ↓
+交给后续 LLM
+```
+
+`backend/app/vlm.py` 负责 VLM 请求、响应解析和按图片修改时间缓存。`backend/app/retrieval_service.py` 在返回 figure parent 时调用它，并把结果放入：
+
+```json
+{
+  "metadata": {
+    "image_path": "...",
+    "image_description": "The figure shows ..."
+  },
+  "context": "Figure: ...\n\nImage description: The figure shows ..."
+}
+```
+
+VLM 默认关闭；关闭时检索流程仍正常返回，不会读取图片。你使用远程 VLM API 时，启动后端前在 CMD 中填写服务商提供的真实地址、模型 ID 和 API Key：
+
+```cmd
+set VLM_ENABLED=true
+set VLM_BASE_URL=https://your-provider.example/v1
+set VLM_MODEL=provider-model-id
+set VLM_API_KEY=your-api-key
+set VLM_TIMEOUT_SECONDS=60
+```
+
+上面三个 `your-*` 只是占位符，不能原样使用。`VLM_BASE_URL` 必须是服务商的 OpenAI 兼容 API 根地址，`VLM_MODEL` 必须使用服务商实际返回的模型 ID。后端运行在本机还是 Docker，都可以访问远程地址，因此以后容器化时通常不需要修改这三个配置；只需要通过环境变量向容器注入 API Key。
+
+当前版本只会在最终命中的 parent 自身带有 `image_path` 时调用 VLM。正文 parent 的 `related_element_ids` 还不会自动扩展为 figure；后续实现关系扩展时，可以在命中正文后再找到关联图片并补充描述。VLM 调用失败会记录警告并保留原始检索结果，不会让整个检索请求失败。
 
 ### 8.6 Python 如何连接并执行 SQL
 

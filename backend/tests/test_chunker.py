@@ -159,6 +159,14 @@ def test_figure_uses_caption_as_context_and_skips_caption_chunk() -> None:
     assert result.children[0].context == result.parents[0].context
     assert result.parents[0].meta["image_path"] == "data/figures/paper/page2_order36.png"
     assert result.children[0].meta["image_path"] == "data/figures/paper/page2_order36.png"
+    assert result.parents[0].meta["context_element_ids"] == [
+        "element-000036",
+        "element-000037",
+    ]
+    assert result.children[0].meta["context_element_ids"] == [
+        "element-000036",
+        "element-000037",
+    ]
 
 
 def test_caption_without_figure_remains_a_caption_chunk() -> None:
