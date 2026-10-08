@@ -9,7 +9,7 @@ from app.routers import chat, sessions
 client = TestClient(app)
 
 
-def test_session_metadata_and_deletion_lifecycle(monkeypatch) -> None:
+def test_session_metadata_and_deletion_lifecycle(monkeypatch, tmp_path) -> None:
     """首条提问命名会话，删除后元数据和历史都不可访问。"""
     records: dict[str, dict[str, object]] = {}
     messages: dict[str, list[dict[str, str]]] = {}
@@ -49,13 +49,30 @@ def test_session_metadata_and_deletion_lifecycle(monkeypatch) -> None:
     monkeypatch.setattr(chat, "get_session", get_session)
     monkeypatch.setattr(chat, "touch_session", touch_session)
     monkeypatch.setattr(chat, "add_message", add_message)
+    (tmp_path / "file-1.pdf").write_bytes(b"pdf")
+    monkeypatch.setattr(chat.retrieval_api, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(
+        chat.retrieval_api,
+        "get_file",
+        lambda file_id: {"file_id": file_id} if file_id == "file-1" else None,
+    )
+
+    class EmptyRetrievalService:
+        def retrieve(self, *_args, **_kwargs):
+            return []
+
+    monkeypatch.setattr(
+        chat.retrieval_api, "retrieval_service", EmptyRetrievalService()
+    )
     monkeypatch.setattr(sessions, "get_session", get_session)
     monkeypatch.setattr(sessions, "list_messages", list_messages)
     monkeypatch.setattr(sessions, "delete_session", delete_session)
     monkeypatch.setattr(sessions, "list_sessions", lambda: list(records.values()))
 
     query = "a" * 51
-    created = client.post("/api/chat", json={"query": query})
+    created = client.post(
+        "/api/chat", json={"file_id": "file-1", "query": query}
+    )
 
     assert created.status_code == 200
     session_id = created.json()["session_id"]
@@ -65,9 +82,15 @@ def test_session_metadata_and_deletion_lifecycle(monkeypatch) -> None:
     assert detail.json()["title"] == query[:50]
     assert detail.json()["created_at"] == 100.0
     assert detail.json()["updated_at"] == 100.0
+    assert created.json()["answer"] == "我没有在这篇论文中检索到足够证据来回答这个问题。"
+    assert client.get(f"/api/sessions/{session_id}/history").json() == [
+        {"role": "user", "content": query},
+        {"role": "assistant", "content": "我没有在这篇论文中检索到足够证据来回答这个问题。"},
+    ]
 
     second_chat = client.post(
-        "/api/chat", json={"query": "第二个问题", "session_id": session_id}
+        "/api/chat",
+        json={"file_id": "file-1", "query": "第二个问题", "session_id": session_id},
     )
     assert second_chat.status_code == 200
     refreshed_detail = client.get(f"/api/sessions/{session_id}")

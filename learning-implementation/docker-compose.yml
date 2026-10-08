@@ -1,4 +1,23 @@
 services:
+  milvus:
+    image: milvusdb/milvus:v2.5.0
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      COMMON_STORAGETYPE: local
+    ports:
+      - "19531:19530"
+      - "9092:9091"
+    volumes:
+      - learning_milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -18,4 +37,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  learning_milvus_data:
   learning_postgres_data:

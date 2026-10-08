@@ -19,6 +19,9 @@ def test_settings_read_model_and_retrieval_configuration_from_environment(monkey
     monkeypatch.setenv("VLM_BASE_URL", "https://provider.example/v1")
     monkeypatch.setenv("VLM_MODEL", "gpt-4o")
     monkeypatch.setenv("VLM_API_KEY", "remote-key")
+    monkeypatch.setenv("MILVUS_ENABLED", "true")
+    monkeypatch.setenv("MILVUS_URI", "http://127.0.0.1:19531")
+    monkeypatch.setenv("MILVUS_COLLECTION_PREFIX", "learning_test")
 
     settings = Settings.from_env()
 
@@ -35,6 +38,9 @@ def test_settings_read_model_and_retrieval_configuration_from_environment(monkey
     assert settings.vlm_base_url == "https://provider.example/v1"
     assert settings.vlm_model == "gpt-4o"
     assert settings.vlm_api_key == "remote-key"
+    assert settings.milvus_enabled is True
+    assert settings.milvus_uri == "http://127.0.0.1:19531"
+    assert settings.milvus_collection_prefix == "learning_test"
 
 
 def test_settings_use_safe_defaults_without_enabling_remote_services(monkeypatch) -> None:
@@ -52,6 +58,9 @@ def test_settings_use_safe_defaults_without_enabling_remote_services(monkeypatch
         "VLM_BASE_URL",
         "VLM_MODEL",
         "VLM_API_KEY",
+        "MILVUS_ENABLED",
+        "MILVUS_URI",
+        "MILVUS_COLLECTION_PREFIX",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -69,6 +78,9 @@ def test_settings_use_safe_defaults_without_enabling_remote_services(monkeypatch
     assert DEFAULT_MIN_SCORE == 0.8
     assert settings.vlm_enabled is False
     assert settings.vlm_api_key == ""
+    assert settings.milvus_enabled is False
+    assert settings.milvus_uri == "http://localhost:19531"
+    assert settings.milvus_collection_prefix == "learning_rag"
 
 
 def test_settings_reject_invalid_positive_integer(monkeypatch) -> None:

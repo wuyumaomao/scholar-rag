@@ -554,7 +554,7 @@ PDF 里的文字除了内容，还带有页面坐标（bounding box，简称 bbo
 
 切分使用 LangChain 的 `RecursiveCharacterTextSplitter`，默认目标长度为 500 个字符、重叠 50 个字符。分隔符依次尝试段落换行、换行、句号、问号、感叹号、分号和空格；这里数的是字符，不是模型 token。切分按单个解析元素独立进行，所以不会把图注或下一段混进当前段落。章节路径会作为上下文前缀加到 parent 和每个 child；分隔标点保留在前一个 child 末尾。
 
-parent 和 child 是从解析文本派生的两种表示，不是两份原始 PDF。当前实现只在运行期间返回这两组对象，并写入检查用 Markdown；尚未将 chunk 保存到数据库或 Milvus。若以后持久化，通常会保存 parent 供命中后取回更完整上下文，并单独保存/向量化较小的 child；原 PDF 仍只保留一份。过滤章节标题和表格内重复 caption 后，当前样例生成 175 个 parent、219 个 child，其中 24 个 parent 被拆分；可用下面的命令重新生成完整预览：
+parent 和 child 是从解析文本派生的两种表示，不是两份原始 PDF。`create_chunks()` 本身只返回 Python 对象并可写出预览；通过上传 API 且启用 Milvus 时，parent context 和 child 检索单元会分别持久化到两个 collection。原 PDF 仍只保留一份。过滤章节标题和表格内重复 caption 后，当前样例生成 175 个 parent、219 个 child，其中 24 个 parent 被拆分；可用下面的命令重新生成完整预览：
 
 ```cmd
 cd learning-implementation\backend
@@ -604,7 +604,59 @@ hits = retriever.search(
 )
 ```
 
-如果命中的是 figure child，展开后的 figure parent 会保留 `context`、`image_path` 和其他 metadata，后续可以据此读取图片交给 VLM。`top_k=3` 表示最终最多返回三个 parent，不代表答案一定正确；之后要用人工标注的问题集计算 Recall@k 等指标。当前本地检索器把向量保存在内存中，程序退出后数据消失，下一阶段才学习 Milvus 持久化。
+如果命中的是 figure child，展开后的 figure parent 会保留 `context`、`image_path` 和其他 metadata，后续可以据此读取图片交给 VLM。`top_k=3` 表示最终最多返回三个 parent，不代表答案一定正确；之后要用人工标注的问题集计算 Recall@k 等指标。内存检索器仍保留为关闭 Milvus 时的教学/测试路径；启用 Milvus 后，向量和 chunk 会持久化到两个 collection。
+
+#### Milvus：持久化 parent/child 检索数据
+
+Milvus 是向量数据库。学习版用它保存 child embedding 并做 Dense 向量搜索；它不是 PostgreSQL 的替代品。PostgreSQL 仍负责文件名、大小等业务元数据，Milvus 保存解析后的 parent/child chunks 和 child vectors。
+
+学习版 Compose 增加了独立的 Milvus Standalone 服务：
+
+```text
+容器内 Milvus gRPC：19530
+宿主机映射端口：19531
+宿主机健康检查端口：9092（容器内 9091）
+Docker 数据卷：learning_milvus_data
+```
+
+宿主机运行的 Uvicorn 通过 `http://localhost:19531` 连接。原项目 Compose 使用宿主机 `19530`，所以学习版映射到 `19531`，两边不会抢同一个端口。Milvus Standalone 镜像内部带有嵌入式 etcd；本学习版只添加一个 Milvus 服务，不额外再写 etcd 或 MinIO 服务。
+
+在现有 `backend/.env` 中确认以下三项；不要用 `.env.example` 覆盖已有 `.env`，它可能包含你的 LLM/VLM 配置：
+
+```dotenv
+MILVUS_ENABLED=true
+MILVUS_URI=http://localhost:19531
+MILVUS_COLLECTION_PREFIX=learning_rag
+```
+
+CMD 下启动服务：
+
+```cmd
+cd G:\scholar-rag\learning-implementation
+docker compose up -d milvus
+docker compose ps
+```
+
+只启动 `milvus` 不会重建、停止或删除当前 PostgreSQL 容器及数据卷。普通的 `docker compose down` 会删除 Compose 容器和网络，但保留数据卷；不要使用 `docker compose down -v`，它会删除 Compose 数据卷。
+
+打开 `.env` 并启用 Milvus 后，新的上传流程是：
+
+```text
+保存 PDF + PostgreSQL 文件元数据
+        ↓
+Docling 解析 → 创建 parent/child → 生成 child embedding
+        ↓
+parents collection：完整 parent context + metadata + Milvus 必需的占位向量
+children collection：child context + metadata + parent_chunk_id + embedding
+```
+
+collection 按 embedding 维度命名，例如 `learning_rag_parents_384d` 和 `learning_rag_children_384d`。维度变化会使用新的 collection 名，避免把不兼容向量写进旧 schema；模型或解析/切分实现变化则通过索引 fingerprint 触发对应文件重建。fingerprint 包含 PDF 内容、embedding 模型名与维度、解析/切分代码及 Docling 和 LangChain splitter 版本。
+
+Milvus 要求每个 collection 都有向量字段，因此 parent collection 有一个全零的 `storage_anchor` 向量字段，并为它建索引以满足 Milvus 加载 collection 的要求。这个占位向量不来自模型、不参与搜索；只有 child collection 的 `embedding` 字段保存真实 embedding 并用于 Dense 检索。每条记录同时保存该文件预期的 parent/child 数量，后端重启时会检查数量与 fingerprint，发现部分写入就重建索引。
+
+检索流程仍由现有 `RetrievalService` 编排：Milvus 对 child vectors 做 Dense top-k；child 文本从持久层恢复后在后端内存中重建 BM25；两路 child 排名经过 parent 去重与 RRF，再进入可选 reranker。命中后端会从 parent collection 取回完整 parent context，之后照常展开 `related_element_ids` 里的图表上下文。这样后端重启后不必重新解析和向量化已有文件。
+
+上传请求会等待该 PDF 完成解析和索引，索引失败时接口返回 503 并清理本次上传的文件和 PostgreSQL 元数据，避免留下“文件存在但未建索引”的假成功。删除文件时先清理两个 Milvus collection，再删除本地 PDF 和 PostgreSQL 记录。Milvus 未启用时，系统继续走之前的内存索引路径；该路径重启后需要重新解析。
 
 可以用真实论文做一次端到端的本地验证：
 
@@ -697,7 +749,7 @@ curl.exe -X POST "http://127.0.0.1:8100/api/retrieve" -H "Content-Type: applicat
 
 默认关闭 Cross-Encoder 时，响应中的 `score` 是 RRF 融合分数，不再是 cosine 相似度；不同查询的 RRF 分数也不适合直接当作概率比较。启用重排后，`score` 是 Cross-Encoder 输出的相关性分数，同样不是概率，且它和 RRF 分数不在同一量纲。响应还包含 `chunk_id`、`context` 和 `metadata`；figure parent 的 metadata 会包含 `image_path`，随后继续执行 VLM 图片描述增强。
 
-第一次查询某个 PDF 时，服务会解析并向量化整份文件，因此可能需要等待 Docling 和 embedding 模型完成加载；后续查询复用进程内缓存。服务重启后缓存会消失，并在下次查询时重新构建。当前还没有把 parent、child 或向量持久化到 Milvus/PostgreSQL。
+启用 Milvus 后，上传请求会等待该 PDF 完成解析、切块和向量写入；首次上传可能需要等待 Docling 与 embedding 模型。服务重启后，后端会从 Milvus 恢复 parent/child 和 BM25 文本，不用重新解析或向量化文档。若 `MILVUS_ENABLED=false`，则使用旧内存路径，首次检索时才构建索引，重启后需要重新处理。
 
 在 CMD 中先上传 PDF：
 
@@ -897,6 +949,46 @@ benchmark runner 在同一排序阶段之后运行相同的关联上下文扩展
 
 5 个问题的逐题分数发生变化，其余 111 题不变。新的逐题报告保存在 `evaluation-results-hybrid-rerank-related-context.json`；此前的 baseline 文件保留。指标上升来自相关图表证据现在确实随正文进入上下文，不代表 Dense、BM25 或 reranker 的原始排序本身变好了。
 
+#### 用检索结果生成有依据的回答
+
+检索已经返回最多 `top_k` 个 parent。接下来由 `backend/app/generation/answer_generator.py` 中的 `AnswerGenerator` 接收原始问题和 `RetrievalHit` 列表，把每个 parent 的正文、页码、章节路径和来源 element ID 编成带 `[S1]`、`[S2]` 标签的证据块，再调用 OpenAI 兼容的 `/chat/completions` 接口。生成模块直接复用 `Settings` 中的 `LLM_ENABLED`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`、`LLM_TEMPERATURE` 和 `LLM_MAX_TOKENS`，不在代码里重复写模型或密钥。
+
+系统提示词要求模型用与问题相同的语言作答，只使用检索到的论文内容，在事实陈述旁引用来源及 PDF 页码（例如 `[S1, p. 3]`）；证据不够时应说明缺少什么，而不是用外部知识补全。论文段落作为不可信输入处理，提示模型不要执行段落中可能出现的指令。回答及引用目前由模型生成，代码尚未自动核验每条引用是否真的被对应段落支持。
+
+可以在 `backend/` 目录中直接传入检索命中进行独立验证：
+
+```python
+from app.config import Settings
+from app.documents.chunker import Chunk
+from app.generation.answer_generator import AnswerGenerator
+from app.retrieval.retriever import RetrievalHit
+
+hit = RetrievalHit(
+    chunk=Chunk(
+        chunk_id="element-000014-parent",
+        context="A convolutional network predicts depth from each image.",
+        meta={"page_nums": [3], "source_element_ids": ["element-000014"]},
+    ),
+    score=0.92,
+)
+answer = AnswerGenerator(settings=Settings.from_env()).generate(
+    "How does the model estimate depth?", [hit]
+)
+print(answer)
+```
+
+运行真实调用前，需在 `backend/.env` 配好 `LLM_ENABLED=true`、`LLM_BASE_URL`、`LLM_MODEL` 和服务商的 `LLM_API_KEY`。单元测试通过假 transport 验证请求内容，不会访问远程模型。
+
+现在 `/api/chat` 会接收 `file_id` 和 `query`，用同一套 `RetrievalService` 搜索该论文，再把 parent 证据交给 `AnswerGenerator`。检索为空时，接口直接返回明确的拒答，不调用 LLM；成功回答后才创建或更新会话，并将用户问题和助手回答写入 PostgreSQL。这样一来，LLM 请求失败时不会留下只有用户问题的半条会话记录。未知文件、缺失的 PDF、无效会话分别返回 404；检索输入错误返回 422；生成服务不可用返回 503。当前每次只把本轮问题交给检索与生成；虽然历史消息会保存到数据库，但暂时不会作为上下文传给 LLM。回答里的引用仍由模型生成，尚未自动核验。
+
+可用 CMD 通过接口测试，下面的 `file_id` 必须替换成 `/api/files/upload` 返回的 ID：
+
+```cmd
+curl.exe -X POST "http://127.0.0.1:8100/api/chat" -H "Content-Type: application/json" -d "{\"file_id\":\"你的文件ID\",\"query\":\"How is depth estimated from endoscopy images?\"}"
+```
+
+如果要继续同一会话，在 JSON 中增加 `session_id`。响应仍包含 `answer` 和 `session_id`；回答正文里的 `[S1, p. 3]` 是生成器基于检索证据要求模型给出的页码引用。
+
 #### 统一模型配置
 
 模型配置集中在 `backend/app/config.py` 的 `Settings` 中。它负责加载 `backend/.env` 和进程环境变量，并进行类型校验；它不负责加载模型或发送请求，`EmbeddingService`、`VisionService` 等服务通过配置获得模型名和 API 参数。
@@ -906,7 +998,7 @@ benchmark runner 在同一排序阶段之后运行相同的关联上下文扩展
     ↓
 Settings.from_env()
     ↓
-EmbeddingService / VisionService / 后续 Reranker、LLM 服务
+EmbeddingService / VisionService / Reranker / AnswerGenerator
 ```
 
 当前集中管理的配置包括：
@@ -985,7 +1077,7 @@ set VLM_TIMEOUT_SECONDS=60
 
 上面三个 `your-*` 只是占位符，不能原样使用。`VLM_BASE_URL` 必须是服务商的 OpenAI 兼容 API 根地址，`VLM_MODEL` 必须使用服务商实际返回的模型 ID。后端运行在本机还是 Docker，都可以访问远程地址，因此以后容器化时通常不需要修改这三个配置；只需要通过环境变量向容器注入 API Key。
 
-当前版本只会在最终命中的 parent 自身带有 `image_path` 时调用 VLM。正文 parent 的 `related_element_ids` 还不会自动扩展为 figure；后续实现关系扩展时，可以在命中正文后再找到关联图片并补充描述。VLM 调用失败会记录警告并保留原始检索结果，不会让整个检索请求失败。
+正文 parent 的 `related_element_ids` 会在最终检索后扩展出关联 Figure parent 和图注；如果本机设置启用了 VLM，后端还会尝试生成图片描述。VLM 调用失败会记录警告并保留原始检索结果，不会让整个检索请求失败。
 
 ### 8.6 Python 如何连接并执行 SQL
 
