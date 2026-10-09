@@ -1,19 +1,24 @@
 """Chat API backed by document retrieval and grounded answer generation."""
 
 import asyncio
+import json
 import logging
 from pathlib import Path
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.generation.answer_generator import AnswerGenerationError, AnswerGenerator
+from app.retrieval.retriever import RetrievalHit
 from app.routers import retrieval as retrieval_api
 from app.storage.store import add_message, create_session, get_session, touch_session
 
 router = APIRouter()
 answer_generator = AnswerGenerator(settings=retrieval_api.settings)
 logger = logging.getLogger(__name__)
+NO_EVIDENCE_ANSWER = "我没有在这篇论文中检索到足够证据来回答这个问题。"
 
 
 class ChatRequest(BaseModel):
@@ -31,10 +36,10 @@ class ChatRequest(BaseModel):
         return value
 
 
-@router.post("/api/chat")
-async def chat(request: ChatRequest) -> dict[str, str]:
-    """Retrieve evidence, generate a grounded answer, and persist the exchange."""
-
+async def _prepare_chat(
+    request: ChatRequest,
+) -> tuple[dict[str, object] | None, list[RetrievalHit]]:
+    """Validate the selected file/session and retrieve evidence before response."""
     file_record = await asyncio.to_thread(retrieval_api.get_file, request.file_id)
     if file_record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在")
@@ -69,6 +74,38 @@ async def chat(request: ChatRequest) -> dict[str, str]:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
 
+    return existing_session, hits
+
+
+async def _persist_exchange(
+    request: ChatRequest,
+    existing_session: dict[str, object] | None,
+    answer: str,
+) -> str:
+    """Persist a completed user/assistant exchange and return its session ID."""
+    if existing_session is None:
+        session = await asyncio.to_thread(create_session, request.query[:50])
+    else:
+        session = existing_session
+        await asyncio.to_thread(touch_session, session["session_id"])
+
+    session_id = str(session["session_id"])
+    await asyncio.to_thread(add_message, session_id, "user", request.query)
+    await asyncio.to_thread(add_message, session_id, "assistant", answer)
+    return session_id
+
+
+def _sse_event(event: str, data: dict[str, str]) -> str:
+    """Format one SSE event with JSON data and a UTF-8-safe payload."""
+    payload = json.dumps(data, ensure_ascii=False)
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+@router.post("/api/chat")
+async def chat(request: ChatRequest) -> dict[str, str]:
+    """Retrieve evidence, generate a grounded answer, and persist the exchange."""
+    existing_session, hits = await _prepare_chat(request)
+
     if hits:
         try:
             answer = await asyncio.to_thread(
@@ -83,15 +120,50 @@ async def chat(request: ChatRequest) -> dict[str, str]:
                 detail="回答生成服务当前不可用",
             ) from exc
     else:
-        answer = "我没有在这篇论文中检索到足够证据来回答这个问题。"
+        answer = NO_EVIDENCE_ANSWER
 
-    if existing_session is None:
-        session = await asyncio.to_thread(create_session, request.query[:50])
-    else:
-        session = existing_session
-        await asyncio.to_thread(touch_session, session["session_id"])
-
-    session_id = str(session["session_id"])
-    await asyncio.to_thread(add_message, session_id, "user", request.query)
-    await asyncio.to_thread(add_message, session_id, "assistant", answer)
+    session_id = await _persist_exchange(request, existing_session, answer)
     return {"answer": answer, "session_id": session_id}
+
+
+@router.post("/api/chat/stream")
+async def stream_chat(request: ChatRequest) -> StreamingResponse:
+    """Stream grounded answer text as SSE while preserving JSON chat behavior."""
+    existing_session, hits = await _prepare_chat(request)
+
+    async def generate_events() -> AsyncIterator[str]:
+        answer_parts: list[str] = []
+        try:
+            if hits:
+                async for text in answer_generator.astream(request.query, hits):
+                    answer_parts.append(text)
+                    yield _sse_event("token", {"text": text})
+            else:
+                answer_parts.append(NO_EVIDENCE_ANSWER)
+                yield _sse_event("token", {"text": NO_EVIDENCE_ANSWER})
+
+            answer = "".join(answer_parts)
+            session_id = await _persist_exchange(request, existing_session, answer)
+        except AnswerGenerationError as exc:
+            # The exception string is already sanitized by AnswerGenerator.
+            logger.error("Answer generation failed: %s", exc)
+            yield _sse_event(
+                "error", {"detail": "回答生成服务当前不可用"}
+            )
+            return
+        except Exception:
+            # Do not expose database, provider, or request internals to the client.
+            logger.error("Chat stream failed while saving the completed exchange")
+            yield _sse_event("error", {"detail": "回答保存失败，请稍后重试"})
+            return
+
+        yield _sse_event("done", {"session_id": session_id})
+
+    return StreamingResponse(
+        generate_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

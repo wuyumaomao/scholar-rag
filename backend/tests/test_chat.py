@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -141,3 +142,230 @@ def test_chat_does_not_persist_messages_when_answer_generation_fails(
     assert "Answer generation failed: upstream unavailable" in caplog.text
     assert created_sessions == []
     assert saved_messages == []
+
+
+def test_stream_chat_emits_tokens_then_done_and_persists_complete_answer(
+    monkeypatch, tmp_path: Path
+) -> None:
+    (tmp_path / "file-1.pdf").write_bytes(b"pdf")
+    saved_messages: list[tuple[str, str, str]] = []
+    hit = RetrievalHit(
+        chunk=Chunk(
+            chunk_id="element-000001-parent",
+            context="Evidence.",
+            meta={"page_nums": [1]},
+        ),
+        score=0.9,
+    )
+
+    class RetrievalService:
+        def retrieve(self, *_args, **_kwargs):
+            return [hit]
+
+    class RetrievalApi:
+        UPLOAD_DIR = tmp_path
+        FIGURE_DIR = tmp_path / "figures"
+        settings = type("Settings", (), {"top_k": 5, "fetch_k": 20, "min_score": 0.8})()
+        retrieval_service = RetrievalService()
+        get_file = staticmethod(lambda file_id: {"file_id": file_id})
+
+    class StreamingAnswerGenerator:
+        async def astream(self, query, hits):
+            assert query == "Explain the result."
+            assert hits == [hit]
+            yield "The method "
+            yield "works."
+
+    monkeypatch.setattr(chat, "retrieval_api", RetrievalApi, raising=False)
+    monkeypatch.setattr(chat, "answer_generator", StreamingAnswerGenerator(), raising=False)
+    monkeypatch.setattr(
+        chat,
+        "create_session",
+        lambda title: {"session_id": "session-1", "title": title},
+    )
+    monkeypatch.setattr(chat, "get_session", lambda _session_id: None)
+    monkeypatch.setattr(chat, "touch_session", lambda _session_id: None)
+    monkeypatch.setattr(
+        chat,
+        "add_message",
+        lambda session_id, role, content: saved_messages.append(
+            (session_id, role, content)
+        ),
+    )
+
+    response = TestClient(app).post(
+        "/api/chat/stream",
+        json={"file_id": "file-1", "query": "Explain the result."},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    frames = response.text.strip().split("\n\n")
+    assert frames == [
+        'event: token\ndata: {"text": "The method "}',
+        'event: token\ndata: {"text": "works."}',
+        'event: done\ndata: {"session_id": "session-1"}',
+    ]
+    assert saved_messages == [
+        ("session-1", "user", "Explain the result."),
+        ("session-1", "assistant", "The method works."),
+    ]
+
+
+def test_stream_chat_without_hits_streams_deterministic_answer(
+    monkeypatch, tmp_path: Path
+) -> None:
+    (tmp_path / "file-1.pdf").write_bytes(b"pdf")
+    saved_messages: list[tuple[str, str, str]] = []
+
+    class RetrievalService:
+        def retrieve(self, *_args, **_kwargs):
+            return []
+
+    class RetrievalApi:
+        UPLOAD_DIR = tmp_path
+        FIGURE_DIR = tmp_path / "figures"
+        settings = type("Settings", (), {"top_k": 5, "fetch_k": 20, "min_score": 0.8})()
+        retrieval_service = RetrievalService()
+        get_file = staticmethod(lambda file_id: {"file_id": file_id})
+
+    class UnusedAnswerGenerator:
+        async def astream(self, *_args, **_kwargs):
+            raise AssertionError("the model must not run without retrieved evidence")
+            yield "unreachable"
+
+    monkeypatch.setattr(chat, "retrieval_api", RetrievalApi, raising=False)
+    monkeypatch.setattr(chat, "answer_generator", UnusedAnswerGenerator(), raising=False)
+    monkeypatch.setattr(
+        chat,
+        "create_session",
+        lambda title: {"session_id": "session-1", "title": title},
+    )
+    monkeypatch.setattr(chat, "get_session", lambda _session_id: None)
+    monkeypatch.setattr(chat, "touch_session", lambda _session_id: None)
+    monkeypatch.setattr(
+        chat,
+        "add_message",
+        lambda session_id, role, content: saved_messages.append(
+            (session_id, role, content)
+        ),
+    )
+
+    response = TestClient(app).post(
+        "/api/chat/stream",
+        json={"file_id": "file-1", "query": "Question?"},
+    )
+
+    expected = "我没有在这篇论文中检索到足够证据来回答这个问题。"
+    assert response.status_code == 200
+    assert f'event: token\ndata: {{"text": "{expected}"}}' in response.text
+    assert 'event: done\ndata: {"session_id": "session-1"}' in response.text
+    assert saved_messages[-1] == ("session-1", "assistant", expected)
+
+
+def test_stream_chat_reports_generation_error_without_persisting_partial_answer(
+    monkeypatch, tmp_path: Path, caplog
+) -> None:
+    (tmp_path / "file-1.pdf").write_bytes(b"pdf")
+    created_sessions: list[str] = []
+    saved_messages: list[tuple[str, str, str]] = []
+    hit = RetrievalHit(
+        chunk=Chunk(
+            chunk_id="element-000001-parent",
+            context="Evidence.",
+            meta={"page_nums": [1]},
+        ),
+        score=0.9,
+    )
+
+    class RetrievalService:
+        def retrieve(self, *_args, **_kwargs):
+            return [hit]
+
+    class RetrievalApi:
+        UPLOAD_DIR = tmp_path
+        FIGURE_DIR = tmp_path / "figures"
+        settings = type("Settings", (), {"top_k": 5, "fetch_k": 20, "min_score": 0.8})()
+        retrieval_service = RetrievalService()
+        get_file = staticmethod(lambda file_id: {"file_id": file_id})
+
+    class FailingAnswerGenerator:
+        async def astream(self, *_args, **_kwargs):
+            yield "partial answer"
+            raise AnswerGenerationError("upstream unavailable")
+
+    monkeypatch.setattr(chat, "retrieval_api", RetrievalApi, raising=False)
+    monkeypatch.setattr(chat, "answer_generator", FailingAnswerGenerator(), raising=False)
+    monkeypatch.setattr(
+        chat,
+        "create_session",
+        lambda title: created_sessions.append(title),
+    )
+    monkeypatch.setattr(chat, "get_session", lambda _session_id: None)
+    monkeypatch.setattr(chat, "touch_session", lambda _session_id: None)
+    monkeypatch.setattr(
+        chat,
+        "add_message",
+        lambda session_id, role, content: saved_messages.append(
+            (session_id, role, content)
+        ),
+    )
+
+    response = TestClient(app).post(
+        "/api/chat/stream",
+        json={"file_id": "file-1", "query": "Question?"},
+    )
+
+    assert response.status_code == 200
+    assert 'event: token\ndata: {"text": "partial answer"}' in response.text
+    assert 'event: error\ndata: {"detail": "回答生成服务当前不可用"}' in response.text
+    assert "event: done" not in response.text
+    assert "Answer generation failed: upstream unavailable" in caplog.text
+    assert created_sessions == []
+    assert saved_messages == []
+
+
+@pytest.mark.parametrize(
+    ("file_exists", "session_exists", "expected_detail"),
+    [
+        (False, True, "文件不存在"),
+        (True, False, "会话不存在"),
+    ],
+)
+def test_stream_chat_validation_errors_remain_http_json_before_streaming(
+    monkeypatch,
+    tmp_path: Path,
+    file_exists: bool,
+    session_exists: bool,
+    expected_detail: str,
+) -> None:
+    if file_exists:
+        (tmp_path / "file-1.pdf").write_bytes(b"pdf")
+
+    class RetrievalApi:
+        UPLOAD_DIR = tmp_path
+        FIGURE_DIR = tmp_path / "figures"
+        settings = type("Settings", (), {"top_k": 5, "fetch_k": 20, "min_score": 0.8})()
+        get_file = staticmethod(
+            lambda file_id: {"file_id": file_id} if file_exists else None
+        )
+
+    monkeypatch.setattr(chat, "retrieval_api", RetrievalApi, raising=False)
+    monkeypatch.setattr(
+        chat,
+        "get_session",
+        lambda _session_id: {"session_id": "session-1"} if session_exists else None,
+    )
+
+    response = TestClient(app).post(
+        "/api/chat/stream",
+        json={
+            "file_id": "file-1",
+            "query": "Question?",
+            "session_id": "session-1",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": expected_detail}
+    assert not response.headers["content-type"].startswith("text/event-stream")

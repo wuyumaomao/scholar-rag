@@ -951,7 +951,7 @@ benchmark runner 在同一排序阶段之后运行相同的关联上下文扩展
 
 #### 用检索结果生成有依据的回答
 
-检索已经返回最多 `top_k` 个 parent。接下来由 `backend/app/generation/answer_generator.py` 中的 `AnswerGenerator` 接收原始问题和 `RetrievalHit` 列表，把每个 parent 的正文、页码、章节路径和来源 element ID 编成带 `[S1]`、`[S2]` 标签的证据块，再调用 OpenAI 兼容的 `/chat/completions` 接口。生成模块直接复用 `Settings` 中的 `LLM_ENABLED`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`、`LLM_TEMPERATURE` 和 `LLM_MAX_TOKENS`，不在代码里重复写模型或密钥。
+检索已经返回最多 `top_k` 个 parent。接下来由 `backend/app/generation/answer_generator.py` 中的 `AnswerGenerator` 接收原始问题和 `RetrievalHit` 列表，把每个 parent 的正文、页码、章节路径和来源 element ID 编成带 `[S1]`、`[S2]` 标签的证据块，再交给 LangChain 的 `ChatPromptTemplate | ChatOpenAI | StrOutputParser` 链。`ChatOpenAI` 连接 OpenAI 兼容的聊天 API，生成模块直接复用 `Settings` 中的 `LLM_ENABLED`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY`、`LLM_TEMPERATURE` 和 `LLM_MAX_TOKENS`，不在代码里重复写模型或密钥。
 
 系统提示词要求模型用与问题相同的语言作答，只使用检索到的论文内容，在事实陈述旁引用来源及 PDF 页码（例如 `[S1, p. 3]`）；证据不够时应说明缺少什么，而不是用外部知识补全。论文段落作为不可信输入处理，提示模型不要执行段落中可能出现的指令。回答及引用目前由模型生成，代码尚未自动核验每条引用是否真的被对应段落支持。
 
@@ -977,7 +977,7 @@ answer = AnswerGenerator(settings=Settings.from_env()).generate(
 print(answer)
 ```
 
-运行真实调用前，需在 `backend/.env` 配好 `LLM_ENABLED=true`、`LLM_BASE_URL`、`LLM_MODEL` 和服务商的 `LLM_API_KEY`。单元测试通过假 transport 验证请求内容，不会访问远程模型。
+运行真实调用前，需在 `backend/.env` 配好 `LLM_ENABLED=true`、`LLM_BASE_URL`、`LLM_MODEL` 和服务商的 `LLM_API_KEY`。单元测试通过注入 LangChain `Runnable` 假模型验证 Prompt 内容与输出解析，不会访问远程模型。
 
 现在 `/api/chat` 会接收 `file_id` 和 `query`，用同一套 `RetrievalService` 搜索该论文，再把 parent 证据交给 `AnswerGenerator`。检索为空时，接口直接返回明确的拒答，不调用 LLM；成功回答后才创建或更新会话，并将用户问题和助手回答写入 PostgreSQL。这样一来，LLM 请求失败时不会留下只有用户问题的半条会话记录。未知文件、缺失的 PDF、无效会话分别返回 404；检索输入错误返回 422；生成服务不可用返回 503。当前每次只把本轮问题交给检索与生成；虽然历史消息会保存到数据库，但暂时不会作为上下文传给 LLM。回答里的引用仍由模型生成，尚未自动核验。
 
@@ -1134,3 +1134,104 @@ with get_connection() as conn:
 表示完成后会关闭游标和连接；正常结束时，连接上下文会提交事务，异常时会回滚。
 
 以后新增知识点时，优先补充到最具体的章节；如果是新的主题，再增加一个二级标题，并附上对应源码文件或验证命令。
+
+## 9. 学习版前端：React、Vite 与后端 API
+
+学习版前端位于 `learning-implementation/frontend/`，使用 React 编写界面、Vite 提供本地开发服务器。前端与 FastAPI 后端是两个独立进程：本地前端默认运行在 `127.0.0.1:5174`，后端运行在 `127.0.0.1:8100`。
+
+```text
+用户操作浏览器页面
+        ↓ React 组件更新界面
+fetch('/api/...') 发起 HTTP 请求
+        ↓ Vite 开发代理
+FastAPI http://127.0.0.1:8100/api/...
+        ↓
+Milvus / PostgreSQL / LLM
+```
+
+Vite 代理配置在 `frontend/vite.config.js`。浏览器只请求同源路径 `/api/...`，由 Vite 转发到后端。这样开发时不必让浏览器直接跨端口请求 FastAPI，也不需要在前端硬编码后端主机地址。若后端以后放进 Compose，Vite 代理目标才需要按容器网络调整。
+
+前端按职责分成三层：
+
+- `src/App.jsx`：保存页面状态，例如文件列表、当前会话、消息、加载状态和错误提示，并处理按钮/表单事件。
+- `src/api.js`：集中封装 HTTP 请求。组件告诉它“上传这个文件”或“发送这个问题”，它负责构造 `FormData` 或 JSON、请求后端，并把错误转换成可显示的异常。
+- `src/styles.css` 与 JSX 中的 `Message` 组件：分别负责页面布局样式和把聊天内容呈现在页面上。助手回答用 React Markdown 渲染，因此模型返回的标题、列表、粗体等 Markdown 格式能正常显示。
+
+请求与学习版后端的契约如下：
+
+| 用户操作 | HTTP 请求 | 请求数据 / 响应 |
+| --- | --- | --- |
+| 列出论文 | `GET /api/files` | 返回文件元数据数组 |
+| 上传论文 | `POST /api/files/upload` | `multipart/form-data` 字段名必须是 `file`；返回 `file_id` |
+| 提问并流式显示 | `POST /api/chat/stream` | JSON 含 `file_id`、`query`、可选 `session_id`；SSE 逐段发送回答 |
+| 提问并一次性返回 | `POST /api/chat` | 同样的 JSON 请求；返回 `answer`、`session_id` |
+| 列出会话 | `GET /api/sessions` | 返回会话数组 |
+| 读取历史 | `GET /api/sessions/{session_id}/history` | 直接返回消息数组 |
+| 删除会话 | `DELETE /api/sessions/{session_id}` | 返回 HTTP 204，没有 JSON 响应体 |
+
+这里有两个前后端协作的关键点。第一，浏览器上传文件时用 `FormData`，不要自行设置 `Content-Type`，因为浏览器需要自动填写 multipart 的 boundary。第二，删除会话的 204 响应没有 JSON，API 封装必须先处理 204，再调用 `response.json()`；非 2xx 响应则读取后端的 `detail` 作为错误提示。
+
+开始学习版前端时先保持这个请求顺序：启动后端 → 启动 Vite → 上传 PDF → 从返回值保存 `file_id` → 携带 `file_id` 和问题调用 `/api/chat/stream` → 边收到回答边显示。需要用 CMD 和 curl 一次验证完整 JSON 时，仍可调用 `/api/chat`。
+
+启动命令（CMD）：
+
+```cmd
+cd /d G:\scholar-rag\learning-implementation\frontend
+npm install
+npm run dev
+```
+
+自动化 API 契约测试与生产构建：`npm test`、`npm run build`。相关源码：`frontend/src/App.jsx`、`frontend/src/api.js`、`frontend/src/api.test.js`、`frontend/vite.config.js`。
+
+## 10. LangChain 组织回答生成
+
+学习版的回答生成位于 `backend/app/generation/answer_generator.py`。检索到证据后，生成流程使用 LangChain 的组件串成一条 LCEL 链：
+
+```text
+ChatPromptTemplate → ChatOpenAI → StrOutputParser
+```
+
+- `ChatPromptTemplate` 保存固定的系统规则和用户消息模板，并在调用时填入 `{question}`、`{evidence}`。
+- `ChatOpenAI` 通过 `langchain-openai` 连接 OpenAI 兼容的聊天 API；模型名、Base URL、API Key、temperature 和 token 上限仍从后端 `Settings` 读取。
+- `StrOutputParser` 把模型消息解析为普通字符串，因此 `/api/chat` 仍返回原有的 `answer` 文本字段，前端不需要改动。
+
+这条链替代了生成模块里手动拼接 HTTP 请求、解析 API JSON 外壳并提取 `choices[0].message.content` 的代码。`json.loads()` 解析的是 API 通信格式，不等同于 LangChain 输出解析器。当前选择 `StrOutputParser` 是因为应用对外需要 Markdown 文本；它不会验证回答是否忠于论文，也不会验证引用是否正确。
+
+自动化测试通过注入 LangChain `Runnable` 假模型来验证 Prompt 中包含问题和检索证据、输出解析结果以及错误处理，不会调用真实 LLM。依赖在 `backend/requirements.txt` 中声明为 `langchain-openai`；文本切分仍使用独立的 `langchain-text-splitters`。
+
+## 11. SSE 流式聊天
+
+普通 JSON 接口会等后端把整个回答生成完，再一次性返回：
+
+```text
+请求 → 检索 → 等待模型生成完整回答 → 返回 JSON
+```
+
+SSE（Server-Sent Events）让服务器在一个 HTTP 响应中连续发送事件。学习版新增 `POST /api/chat/stream`：后端检索完成后，LangChain 的 `astream()` 会逐段产出文本，FastAPI 把每段包装成 SSE `token` 事件，React 收到一段就更新一次助手消息。回答生成成功后，后端保存完整对话并发送 `done` 事件和 `session_id`；生成失败则发送 `error`，不会把不完整答案保存到历史记录。
+
+```text
+浏览器 POST /api/chat/stream（JSON 请求体）
+        ↓
+FastAPI 校验文件、读取论文检索结果
+        ↓
+LangChain astream() 逐段生成
+        ↓ token / token / token
+React 持续追加文本 → done 后刷新会话列表
+```
+
+本例使用 `fetch` 读取响应体中的 SSE，而不是浏览器原生 `EventSource`。聊天需要通过 POST 提交 `file_id`、`query` 和可选的 `session_id`，原生 `EventSource` 主要支持 GET，不能直接携带这样的 JSON 请求体。浏览器用 `ReadableStream` 读取网络数据，再由 `TextDecoder` 把可能被拆开的 UTF-8 字节还原成文字，最后按空行边界解析 SSE 事件。
+
+事件数据是 JSON：
+
+```text
+event: token
+data: {"text":"The method "}
+
+event: done
+data: {"session_id":"..."}
+
+```
+
+如果生成中途失败，服务器会发送 `event: error`。错误发生在 SSE 响应开始之前（例如论文不存在）时，仍返回普通 HTTP 错误和 JSON `detail`。原来的 `POST /api/chat` 保留，用于希望一次拿到完整 JSON 的调用方和 curl 验证。
+
+相关实现：`backend/app/generation/answer_generator.py` 的 `astream()`、`backend/app/routers/chat.py` 的 `/api/chat/stream`、`frontend/src/api.js` 的 `streamChat()` 与 SSE 解析、`frontend/src/App.jsx` 的增量消息更新。
