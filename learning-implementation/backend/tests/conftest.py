@@ -4,3 +4,4 @@ import os
 
 
 os.environ["MILVUS_ENABLED"] = "false"
+os.environ["LLM_ENABLED"] = "false"

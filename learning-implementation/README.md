@@ -24,6 +24,10 @@ app/
   storage/                 PostgreSQL 元数据和 Milvus parent/child 存储
 ```
 
+## 前端目录
+
+学习版 React + Vite 前端位于 `frontend/`。启动说明和页面/API 结构见 [`frontend/README.md`](frontend/README.md)。本地开发时先启动 8100 端口的 FastAPI，再启动 Vite（默认 5174）；Vite 将 `/api` 代理给学习版后端。
+
 检索算法仍各自放在独立模块中，方便按知识点阅读和单独测试；`scripts/` 放手动运行的导出/评测工具，`tests/` 验证模块行为。
 
 ## 计划里程碑

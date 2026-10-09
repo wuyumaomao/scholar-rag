@@ -59,6 +59,7 @@ test_oureval_full.py
 # Node
 node_modules/
 frontend/dist/
+/learning-implementation/frontend/dist/
 
 # OS
 .DS_Store
