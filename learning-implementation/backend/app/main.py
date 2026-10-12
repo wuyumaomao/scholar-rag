@@ -6,12 +6,14 @@
 import uvicorn
 from fastapi import FastAPI
 
+from app.routers.agent import router as agent_router
 from app.routers.chat import router as chat_router
 from app.routers.files import router as files_router
 from app.routers.retrieval import router as retrieval_router
 from app.routers.sessions import router as sessions_router
 
 app = FastAPI(title="Learning RAG Backend")
+app.include_router(agent_router)
 app.include_router(chat_router)
 app.include_router(files_router)
 app.include_router(retrieval_router)

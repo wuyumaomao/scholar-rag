@@ -8,6 +8,7 @@ python-multipart==0.0.20
 docling>=2.0.0
 langchain-text-splitters
 langchain-openai>=1.0.0
+langgraph==1.2.14
 sentence-transformers>=3.0.0
 pymupdf>=1.24.0
 
