@@ -132,7 +132,7 @@ return {"messages": [response]}
 
 ```text
 START → agent
-agent 无工具调用 → END
+agent 无工具调用 → reflect → END
 agent 有工具调用且预算足够 → tools → agent
 agent 有工具调用但超预算 → stop → END
 ```
@@ -148,6 +148,7 @@ builder = StateGraph(AgentState)
 builder.add_node("agent", agent)
 builder.add_node("tools", tools)
 builder.add_node("stop", stop)
+builder.add_node("reflect", reflect)
 # 添加普通边与条件边……
 graph = builder.compile(checkpointer=self.checkpointer)
 state = await graph.ainvoke(initial_state, config)
@@ -223,3 +224,33 @@ checkpointer 在图执行期间保存状态与进度。相同 thread_id 的下�
 - 保存完整消息和工具证据，尚未裁剪、摘要、过期清理或限制会话数量，适用于短时学习 demo。
 - 无证据拒答会用相同消息 ID 替换 checkpoint 中的最终 AIMessage，避免把未展示的编造答案传给下一轮；trace 仍保留本轮模型原输出用于观察。
 - InMemorySaver 保存图状态，不自动选择值得记住的事实；agent() 将恢复后的 messages 传给模型，才形成可使用的会话上下文。
+
+## 10. reflect：模型审核节点
+
+第一版沿用原项目的审核输入：问题和候选答案。它是调用 LLM 的流程节点，没有自己的工具或自主循环。
+
+```text
+agent 有工具请求 → tools → agent
+agent 生成答案 → reflect → END
+超过工具预算 → stop → END
+```
+
+按下面顺序阅读新增代码：
+
+1. `ReflectionResult` 定义模型需要返回的结构：`is_sufficient`（是否充分）和 `retry_queries`（建议补充检索的问题）。
+2. `_chat_model()` 复用原有模型配置；生成模型绑定检索工具，`_reviewer_for()` 则调用 `with_structured_output(ReflectionResult)`，不绑定工具。
+3. `reflect(state)` 取最新用户问题及最后的候选答案，调用审核模型，并返回 `{"review": review}`。
+4. LangGraph 把 review 合并到 State，checkpointer 保存快照。它不追加到 messages，也不自动进入下一轮的模型上下文。每轮初始化为 None，避免沿用旧审核结果。
+5. `route()` 无工具调用时返回 reflect；注册节点后通过 `reflect → END` 结束。
+
+API 新增字段示例：
+
+```json
+"review": {"is_sufficient": false, "retry_queries": ["limitations and generalization evaluation"]}
+```
+
+trace 会追加 `node=reflect` 的审核结果。第一版只记录意见，不执行 retry_queries、不修改原答案；因此 completed 仍只表示执行结束，需结合 review 观察审核意见。
+
+没有会话证据时跳过审核，review 为 null，保留原来的 no_evidence 拒答；tool_limit 路径也跳过审核。审核失败或结构无效返回安全的 503，不能伪装为审核通过，中断会话仍需创建新 thread_id。
+
+该审核不读取原文，所以只能评估回答是否充分，不能验证事实或引用。后续可单独加入证据输入与有限重试。本轮有证据且正常回答时增加一次 LLM 请求；重启后端后在 Swagger 使用原来的请求即可测试，观察 review 和 trace 最后一项。

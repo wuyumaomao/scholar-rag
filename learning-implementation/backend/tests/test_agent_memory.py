@@ -31,6 +31,8 @@ def test_history_restored_across_agent_instances_and_budget_reset():
     def instance():
         return PaperAgent(settings=Settings(), retrieval_service=FakeRetrieval(),
                           bound_model=RunnableLambda(model), max_tool_calls=1,
+                          bound_reviewer=RunnableLambda(lambda _: {
+                              "is_sufficient": True, "retry_queries": []}),
                           checkpointer=saver, conversation_locks=locks)
 
     async def run():
@@ -43,7 +45,7 @@ def test_history_restored_across_agent_instances_and_budget_reset():
     assert first["thread_id"] == second["thread_id"] == "conversation"
     assert first["tool_calls_used"] == second["tool_calls_used"] == 1
     assert second["status"] == "completed"
-    assert len(second["trace"]) == 3  # current turn only
+    assert len(second["trace"]) == 4  # current turn only, including review
     assert [m.content for m in seen[2] if isinstance(m, HumanMessage)] == ["What method?", "Its limitations?"]
     assert "remaining: 1" in seen[2][0].content
     assert len([m for m in seen[4] if isinstance(m, HumanMessage)]) == 1

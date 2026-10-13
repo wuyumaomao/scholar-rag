@@ -38,7 +38,9 @@ class FakeRetrieval:
 
 def run(service, fn, *, limit=3):
     agent = PaperAgent(settings=Settings(), retrieval_service=service,
-                       bound_model=RunnableLambda(fn), max_tool_calls=limit)
+                       bound_model=RunnableLambda(fn), max_tool_calls=limit,
+                       bound_reviewer=RunnableLambda(lambda _: {
+                           "is_sufficient": True, "retry_queries": []}))
     return asyncio.run(agent.run(file_id="paper-1", pdf_path=Path("paper-1.pdf"),
                                  figure_dir=Path("figures/paper-1"), query="Explain the method"))
 
@@ -65,7 +67,7 @@ def test_real_graph_retrieves_twice_and_returns_tools_to_model():
     assert [c[2] for c in service.calls] == ["method", "limitations"]
     assert all(c[0] == "paper-1" and c[4]["top_k"] == 5 for c in service.calls)
     assert len(result["sources"]) == 1
-    assert [step["node"] for step in result["trace"]] == ["agent", "tools", "agent", "tools", "agent"]
+    assert [step["node"] for step in result["trace"]] == ["agent", "tools", "agent", "tools", "agent", "reflect"]
     assert len(seen[-1]) == 6  # system, user, AI, Tool, AI, Tool
 
 
@@ -155,7 +157,9 @@ def test_two_concurrent_tasks_do_not_share_messages_or_document_scope():
         return AIMessage(content=source["file_id"])
 
     agent = PaperAgent(settings=Settings(), retrieval_service=service,
-                       bound_model=RunnableLambda(model))
+                       bound_model=RunnableLambda(model),
+                       bound_reviewer=RunnableLambda(lambda _: {
+                           "is_sufficient": True, "retry_queries": []}))
 
     async def two_tasks():
         return await asyncio.gather(*[
