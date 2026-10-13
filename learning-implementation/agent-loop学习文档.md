@@ -25,10 +25,11 @@ uv pip install --python .venv/Scripts/python.exe -r backend/requirements.txt
 响应包括：
 
 - `answer`：最终可展示回答；没有证据时由程序给出明确限制提示。
+- `thread_id`：会话标识，首次可不传，由服务生成；后续传相同 ID 连续追问。
 - `status`：`completed`（模型结束且有证据）、`no_evidence`（未得到非空证据）或 `tool_limit`（下一批工具请求超过预算）。`completed` 表示执行结束，不表示回答已经过事实验证。
 - `tool_calls_used`：已交给 ToolNode 处理的工具请求数，无效参数/未知工具也占预算。
-- `sources`：工具实际检索到的非空证据，按 chunk ID 去重；不表示每条证据都被最终引用。
-- `trace`：模型输出、工具调用参数、工具结果，供阅读执行过程，不包含隐藏思维链。
+- `sources`：当前会话工具实际检索到的非空证据，包含历史证据，按 chunk ID 去重；不表示每条证据都被最终引用。
+- `trace`：本轮模型输出、工具调用参数、工具结果，供阅读执行过程，不包含隐藏思维链。
 
 默认预算为 3 个工具请求。如果模型每次请求一个工具，最多调用模型 4 次：每个工具结果之后可再决策一次。最后一次若仍要求工具，则图转到 stop，报告任务未完成。若一批工具请求超出剩余预算，整批都不执行。
 
@@ -53,7 +54,7 @@ ToolMessage：工具结果
 AIMessage：继续工具调用或最终回答
 ```
 
-每次 `run()` 都用新的 HumanMessage 和零计数启动。状态只用于当前请求，未读取数据库会话，未配置 checkpointer。因此它是本次执行的上下文，尚不是跨会话 memory。
+每次 `run()` 都提交新的 HumanMessage 和零计数。同一个 thread_id 会从共享 InMemorySaver 恢复消息历史，再合并新消息；计数和 status 则用本轮初值覆盖。AgentState 还保存 file_id，保证会话固定论文范围。未读取 PostgreSQL 会话数据。
 
 ## 2. Tool：把现有 RAG 包装成模型可调用的能力
 
@@ -148,7 +149,7 @@ builder.add_node("agent", agent)
 builder.add_node("tools", tools)
 builder.add_node("stop", stop)
 # 添加普通边与条件边……
-graph = builder.compile()
+graph = builder.compile(checkpointer=self.checkpointer)
 state = await graph.ainvoke(initial_state, config)
 ```
 
@@ -158,15 +159,67 @@ state = await graph.ainvoke(initial_state, config)
 
 代码：`backend/app/routers/agent.py`。
 
-路由验证输入、数据库文件记录和 PDF 是否存在，然后创建 PaperAgent 并等待 `run()`。可以从 Swagger 或 HTTP 客户端观察完整结果。
+路由验证输入、数据库文件记录和 PDF 是否存在，然后创建 PaperAgent 并等待 `run()`。模块级 InMemorySaver 与会话锁跨请求共享，新建 PaperAgent 不会丢失此前历史。可以从 Swagger 或 HTTP 客户端观察完整结果。
 
-它是独立任务入口，不保存会话，不返回 token SSE；原来的 chat 和前端仍可用于已有 RAG 问答。后续可以在理解 loop 后再设计前端 Agent 模式和阶段事件。
+它在进程内保存 Agent 会话状态，不写 PostgreSQL、不返回 token SSE；原来的 chat 和前端仍可用于已有 RAG 问答。后续可以在理解 loop 后再设计前端 Agent 模式和阶段事件。
 
 ## 验证与边界
 
 - 离线测试通过脚本化模型运行真实编译图，验证连续检索、返回 ToolMessage、预算、无效参数、未知工具、无证据、provider 脱敏及并发请求隔离。
 - API 测试验证输入/文件检查、成功响应和错误映射。
-- 本轮未调用真实 LLM；需要在本机配置的 provider 上确认 tool calling 兼容性。是否需要再次检索由模型决定，普通问题一次检索后结束也是正常行为。
+- 用户已反馈单任务真实工具循环成功。本次多轮记忆扩展尚未调用真实 LLM；是否需要再次检索由模型决定，使用历史证据回答也可能是正常行为。
 - 只有一个工具也能构成 loop，但没有证明多次检索一定比固定 RAG 更好；后续应比较质量、延迟和成本。
 
 建议阅读顺序：AgentState → make_search_tool → _model_for → agent/tools/route → 图连接 → run → HTTP 路由。读的时候始终追问两件事：这一步状态发生了什么变化？下一步执行由什么决定？
+
+## 9. InMemorySaver：让下一轮读取上一轮状态
+
+这次新增的是 checkpointer 与会话 ID，而不是另外创建一个消息数据库。
+
+```python
+# routers/agent.py：只在模块初始化时创建，跨 HTTP 请求复用
+checkpointer = InMemorySaver()
+
+# paper_agent.py：每轮的图连接到同一个保存组件
+graph = builder.compile(checkpointer=self.checkpointer)
+config = {"configurable": {"thread_id": thread_id}}
+
+# 检查已有状态绑定的论文、是否有未完成节点
+previous = await graph.aget_state(config)
+
+# 新一轮：追加问题，重置每轮计数和状态
+state = await graph.ainvoke({
+    "messages": [HumanMessage(content=query)],
+    "tool_calls_used": 0,
+    "status": "completed",
+    "file_id": file_id,
+}, config)
+```
+
+checkpointer 在图执行期间保存状态与进度。相同 thread_id 的下一次调用恢复原 messages，通过消息 reducer 追加本轮输入；不同 thread_id 拥有不同状态。thread_id 属于调用配置，file_id 属于业务状态。
+
+### 在 Swagger 中测试两轮
+
+第一次 POST /api/agent：
+
+```json
+{"file_id": "实际论文ID", "query": "这篇论文采用什么方法？"}
+```
+
+从响应复制 thread_id，再执行：
+
+```json
+{"file_id": "同一篇论文ID", "thread_id": "复制的thread_id", "query": "它有哪些局限？"}
+```
+
+第三轮可以问“请把刚才的方法和局限整理成表格”。trace 只显示本轮动作，sources 包含会话中历史检索证据，因此无新检索也可以基于已有证据回答。
+
+### 当前边界
+
+- 数据仅在本进程内存中，服务重启（包括 --reload 触发重启）会丢失；多 worker 不共享这些会话。demo 使用一个 worker。
+- 每轮默认重新提供 3 个工具请求预算；过去轮次的计数不占本轮预算。
+- 相同会话更换论文返回 409；同一会话尚未完成时再提交请求也返回 409，避免并发覆盖。不同会话可并发。
+- 上一轮异常/取消留下未完成节点时，本版返回 409 提示新建会话，不声称已经实现自动恢复。checkpoint 数据已具备恢复基础，恢复入口是后续独立学习点。
+- 保存完整消息和工具证据，尚未裁剪、摘要、过期清理或限制会话数量，适用于短时学习 demo。
+- 无证据拒答会用相同消息 ID 替换 checkpoint 中的最终 AIMessage，避免把未展示的编造答案传给下一轮；trace 仍保留本轮模型原输出用于观察。
+- InMemorySaver 保存图状态，不自动选择值得记住的事实；agent() 将恢复后的 messages 传给模型，才形成可使用的会话上下文。

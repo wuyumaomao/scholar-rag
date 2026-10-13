@@ -35,7 +35,7 @@ app/
 
 新增 `POST /api/agent`，使用 `StateGraph`、`MessagesState`、`ToolNode` 与条件边，让模型按需调用论文检索工具。默认最多处理 3 个工具请求，返回答案、状态、证据和执行轨迹。可在后端 `/docs` 输入已上传论文的 `file_id` 与 `query`；模型服务需支持 tool calling。
 
-组件用途、运行方式和逐段讲解见 [agent-loop学习文档.md](agent-loop学习文档.md)。本版状态只存在于一次请求，尚未接入跨会话历史或 checkpoint。
+组件用途、运行方式和逐段讲解见 [agent-loop学习文档.md](agent-loop学习文档.md)。已接入进程内 `InMemorySaver`：首次请求返回 `thread_id`，后续请求携带相同 ID 恢复消息历史；每轮重置工具预算。同一会话固定论文范围。重启后历史丢失，尚未接入 PostgreSQL 历史或执行恢复入口。
 
 ## 计划里程碑
 

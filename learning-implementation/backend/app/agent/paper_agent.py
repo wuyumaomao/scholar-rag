@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import Lock
 from typing import Any, Literal
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import Runnable
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -20,6 +23,10 @@ from app.retrieval.retrieval_service import RetrievalService
 
 class AgentExecutionError(RuntimeError):
     """A safe, client-facing category; never include provider error details."""
+
+
+class AgentConversationError(ValueError):
+    """A conversation cannot change papers or execute overlapping turns."""
 
 
 class SearchInput(BaseModel):
@@ -40,7 +47,8 @@ class AgentState(MessagesState):
     """MessagesState supplies the append/merge reducer for messages."""
 
     tool_calls_used: int
-    status: Literal["completed", "tool_limit"]
+    status: Literal["completed", "tool_limit", "no_evidence"]
+    file_id: str
 
 
 SYSTEM_PROMPT = """You are a research assistant for ONE selected paper.
@@ -99,11 +107,13 @@ def make_search_tool(
 
 
 class PaperAgent:
-    """Build a fresh graph/state for each task and reuse existing RAG services."""
+    """Build a scoped graph per turn and restore state from a shared saver."""
 
     def __init__(
         self, *, settings: Settings, retrieval_service: RetrievalService,
         max_tool_calls: int = 3, bound_model: Runnable | None = None,
+        checkpointer: InMemorySaver | None = None,
+        conversation_locks: dict[str, Lock] | None = None,
     ) -> None:
         if not 1 <= max_tool_calls <= 10:
             raise ValueError("max_tool_calls must be between 1 and 10")
@@ -112,6 +122,8 @@ class PaperAgent:
         self.max_tool_calls = max_tool_calls
         # Injection is for offline verification; production binds the real tool.
         self.bound_model = bound_model
+        self.checkpointer = checkpointer if checkpointer is not None else InMemorySaver()
+        self.conversation_locks = conversation_locks if conversation_locks is not None else {}
 
     def _model_for(self, search_tool):
         if self.bound_model is not None:
@@ -182,42 +194,76 @@ class PaperAgent:
         builder.add_conditional_edges("agent", route, ["tools", "stop", END])
         builder.add_edge("tools", "agent")
         builder.add_edge("stop", END)
-        return builder.compile()
+        return builder.compile(checkpointer=self.checkpointer)
 
     async def run(
         self, *, file_id: str, pdf_path: Path, figure_dir: Path, query: str,
+        thread_id: str | None = None,
     ) -> dict[str, Any]:
         if not query.strip():
             raise ValueError("query must not be blank")
+        thread_id = thread_id or str(uuid4())
+        if not thread_id.strip():
+            raise ValueError("thread_id must not be blank")
+        lock = self.conversation_locks.setdefault(thread_id, Lock())
+        if not lock.acquire(blocking=False):
+            raise AgentConversationError("该会话正在执行，请等待本轮结束")
+        try:
+            return await self._run_turn(file_id=file_id, pdf_path=pdf_path,
+                                        figure_dir=figure_dir, query=query, thread_id=thread_id)
+        finally:
+            lock.release()
+
+    async def _run_turn(
+        self, *, file_id: str, pdf_path: Path, figure_dir: Path, query: str,
+        thread_id: str,
+    ) -> dict[str, Any]:
         search_tool = make_search_tool(
             self.retrieval_service, self.settings, file_id, pdf_path, figure_dir,
         )
         try:
             model = self._model_for(search_tool)
             graph = self._build_graph(model, search_tool)
+            config = {"recursion_limit": 2 * self.max_tool_calls + 5,
+                      "configurable": {"thread_id": thread_id}}
+            previous = await graph.aget_state(config)
+            if previous.values and previous.values.get("file_id") != file_id:
+                raise AgentConversationError("会话已绑定另一篇论文，请创建新会话")
+            if previous.next:
+                raise AgentConversationError("上一轮执行中断，请创建新会话；本版尚未提供恢复入口")
+            history_length = len(previous.values.get("messages", []))
             state = await graph.ainvoke(
-                {"messages": [HumanMessage(content=query)], "tool_calls_used": 0, "status": "completed"},
-                {"recursion_limit": 2 * self.max_tool_calls + 5},
+                {"messages": [HumanMessage(content=query)], "tool_calls_used": 0,
+                 "status": "completed", "file_id": file_id},
+                config,
             )
-        except AgentExecutionError:
+        except (AgentExecutionError, AgentConversationError):
             raise
         except Exception as exc:
             raise AgentExecutionError("Agent execution failed") from exc
 
         sources_by_id = {}
         trace = []
-        for message in state["messages"]:
+        for index, message in enumerate(state["messages"]):
             if isinstance(message, AIMessage):
-                trace.append({"node": "agent", "text": message.text, "tool_calls": message.tool_calls})
+                if index >= history_length:
+                    trace.append({"node": "agent", "text": message.text, "tool_calls": message.tool_calls})
             elif isinstance(message, ToolMessage):
-                trace.append({"node": "tools", "tool_call_id": message.tool_call_id,
-                              "name": message.name, "status": message.status, "result": message.content})
+                if index >= history_length:
+                    trace.append({"node": "tools", "tool_call_id": message.tool_call_id,
+                                  "name": message.name, "status": message.status, "result": message.content})
                 for source in message.artifact or []:
                     sources_by_id[source["source_id"]] = source
         status = state["status"]
         answer = state["messages"][-1].text.strip()
         if status == "completed" and not sources_by_id:
             status, answer = "no_evidence", NO_EVIDENCE_ANSWER
-        return {"answer": answer, "status": status,
+            # Replace the saved final message by ID, so later turns do not see
+            # the unsupported model answer that the API refused to display.
+            await graph.aupdate_state(config, {
+                "messages": [AIMessage(content=answer, id=state["messages"][-1].id)],
+                "status": status,
+            }, as_node="agent")
+        return {"answer": answer, "status": status, "thread_id": thread_id,
                 "tool_calls_used": state["tool_calls_used"],
                 "sources": list(sources_by_id.values()), "trace": trace}

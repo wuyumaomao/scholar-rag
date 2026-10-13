@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.agent.paper_agent import AgentExecutionError
 from app.routers import agent
+from app.agent.paper_agent import AgentConversationError
 
 
 def setup_file(monkeypatch, tmp_path):
@@ -61,3 +62,23 @@ def test_agent_api_model_failure_is_sanitized_503(monkeypatch, tmp_path):
     response = TestClient(app).post("/api/agent", json={"file_id": "paper", "query": "question"})
     assert response.status_code == 503
     assert "private" not in response.text
+
+
+def test_agent_api_passes_thread_and_maps_conflicts(monkeypatch, tmp_path):
+    setup_file(monkeypatch, tmp_path)
+
+    class ConflictAgent:
+        def __init__(self, **kwargs):
+            assert kwargs["checkpointer"] is agent.checkpointer
+            assert kwargs["conversation_locks"] is agent.conversation_locks
+
+        async def run(self, **kwargs):
+            assert kwargs["thread_id"] == "thread-1"
+            raise AgentConversationError("会话已绑定另一篇论文，请创建新会话")
+
+    monkeypatch.setattr(agent, "PaperAgent", ConflictAgent)
+    response = TestClient(app).post("/api/agent", json={
+        "file_id": "paper", "query": "question", "thread_id": "thread-1"})
+    assert response.status_code == 409
+    assert TestClient(app).post("/api/agent", json={
+        "file_id": "paper", "query": "question", "thread_id": " "}).status_code == 422

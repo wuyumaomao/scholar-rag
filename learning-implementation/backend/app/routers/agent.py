@@ -1,26 +1,35 @@
-"""A standalone single-task agent entry point for learning the graph loop."""
+"""Agent turns with process-local conversation checkpoints."""
 
 import asyncio
 from pathlib import Path
+from threading import Lock
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from langgraph.checkpoint.memory import InMemorySaver
 
-from app.agent.paper_agent import AgentExecutionError, PaperAgent
+from app.agent.paper_agent import AgentConversationError, AgentExecutionError, PaperAgent
 from app.routers import retrieval as retrieval_api
 
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+# These objects live across HTTP requests; creating them inside the route
+# would lose all earlier turns. This demo stores state in one process only.
+checkpointer = InMemorySaver()
+conversation_locks: dict[str, Lock] = {}
 
 
 class AgentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     file_id: str = Field(min_length=1, max_length=200)
     query: str = Field(min_length=1, max_length=2000)
+    thread_id: str | None = Field(default=None, min_length=1, max_length=200)
 
-    @field_validator("file_id", "query")
+    @field_validator("file_id", "query", "thread_id")
     @classmethod
-    def nonblank(cls, value: str) -> str:
+    def nonblank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         if not value.strip():
             raise ValueError("不能为空")
         return value.strip()
@@ -35,10 +44,13 @@ async def run_agent(request: AgentRequest) -> dict:
     if not await asyncio.to_thread(Path.is_file, pdf_path):
         raise HTTPException(status_code=404, detail="PDF 文件不存在")
     agent = PaperAgent(settings=retrieval_api.settings,
-                       retrieval_service=retrieval_api.retrieval_service)
+                       retrieval_service=retrieval_api.retrieval_service,
+                       checkpointer=checkpointer, conversation_locks=conversation_locks)
     try:
         return await agent.run(file_id=request.file_id, pdf_path=pdf_path,
                                figure_dir=retrieval_api.FIGURE_DIR / request.file_id,
-                               query=request.query)
+                               query=request.query, thread_id=request.thread_id)
+    except AgentConversationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except AgentExecutionError as exc:
         raise HTTPException(status_code=503, detail="Agent 执行服务当前不可用") from exc
