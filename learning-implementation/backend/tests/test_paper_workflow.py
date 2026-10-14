@@ -31,9 +31,11 @@ def passing_review(_):
 
 
 def workflow(*, tasks=None, planner=None, model=research_model, writer=None,
-             reviewer=passing_review, service=None, budget=6, saver=None, locks=None):
+             reviewer=passing_review, service=None, budget=6, saver=None, locks=None,
+             memory_store=None, user_id="local-user"):
     return PaperWorkflow(settings=Settings(), retrieval_service=service or FakeRetrieval(),
         max_tool_calls=budget, checkpointer=saver, conversation_locks=locks,
+        memory_store=memory_store, user_id=user_id,
         bound_planner=RunnableLambda(planner or (lambda _: {"tasks": tasks or [task("method")]})),
         bound_model=RunnableLambda(model),
         bound_writer=RunnableLambda(writer or (lambda _: AIMessage(content="Final answer [paper-parent, p. 3]."))),
@@ -251,7 +253,7 @@ def test_api_runs_real_workflow_and_returns_tasks_and_review(monkeypatch, tmp_pa
     assert data["review"]["decision"] == "pass"
     assert len(data["tasks"]) == 1
     assert data["llm_calls_used"] == 4
-    assert [e["node"] for e in data["trace"]] == ["planner", "researcher", "writer", "reflect", "finalize"]
+    assert [e["node"] for e in data["trace"]] == ["planner", "researcher", "writer", "reflect", "finalize", "memory_update"]
 
 
 def test_native_planner_writer_and_reviewer_use_normal_chat_without_forced_tool_choice(monkeypatch):

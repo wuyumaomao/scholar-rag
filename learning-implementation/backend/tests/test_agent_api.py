@@ -17,7 +17,8 @@ def test_agent_api_returns_single_task_result(monkeypatch, tmp_path):
 
     class FakeAgent:
         def __init__(self, **kwargs):
-            pass
+            assert kwargs["memory_store"] is agent.memory_store
+            assert kwargs["user_id"] == "local-user"
 
         async def run(self, **kwargs):
             assert kwargs["file_id"] == "paper"

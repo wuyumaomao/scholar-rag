@@ -32,7 +32,8 @@ flowchart TD
     F -->|需要修正且允许| V[prepare_revision]
     V -->|表达问题| W
     V -->|缺少证据| R
-    Z --> E([END])
+    Z --> M[memory_update]
+    M --> E([END])
 ```
 
 Researcher子图现在是 `START → retrieve → generate → END`：程序只执行一次检索（仍返回配置的top-k parent证据），再由一个不绑定工具的模型生成子任务结论。审核只对Writer的最终候选答案执行；Reflect需要新证据时重新派发一个全新的Researcher任务。旧版 `PaperAgent.run()` 的自主 `agent ↔ tools` loop 保留在单任务文档中，主图不再使用它。
@@ -47,8 +48,10 @@ Researcher子图现在是 `START → retrieve → generate → END`：程序只�
 | answer、sources、review、revision_count | 主图 | 本轮 |
 | trace | 主图，追加合并 | 本轮 |
 | Researcher messages、tool_calls_used | 各自子图 | 单任务执行；本主图每任务固定一次检索 |
+| memory_candidates | 主图 | 本轮；Reflect候选，审核通过且来源校验通过才写入Store |
+| InMemoryStore中的论文fact | Store | 跨thread、跨HTTP请求；进程重启丢失 |
 
-`messages`继承MessagesState的add_messages；任务结果采用字典合并reducer，并行结果不会相互覆盖。每轮初始化使用 `Overwrite({})` / `Overwrite([])` 清空research_results和trace，防止reducer把上一轮结果重新累积进来。
+`messages`继承MessagesState的add_messages；任务结果采用字典合并reducer，并行结果不会相互覆盖。每轮初始化使用 `Overwrite({})` / `Overwrite([])` 清空research_results和trace，防止reducer把上一轮结果重新累积进来。Memory不放进State作为长期数据库：路由模块共享一个 `InMemoryStore`，按 `("paper", file_id)` namespace 保存论文事实；Planner开始前召回与问题相关的最多6条，作为待当前证据验证的提示。
 
 每个Send携带task_id、独立question、必要background与一次检索预算。同一个researcher节点运行多次，不用写researcher1/researcher2。每次执行新建PaperAgent并调用run_task；不会调用恢复会话的run，也不把用户thread_id用作子任务历史。
 
@@ -58,7 +61,7 @@ Researcher子图现在是 `START → retrieve → generate → END`：程序只�
 
 | 调用 | 实际发送内容 |
 | --- | --- |
-| Planner | 专用提示词、输出schema、主图用户/最终助手对话 |
+| Planner | 专用提示词、输出schema、主图用户/最终助手对话、相关memory fact |
 | Researcher | 一次检索得到的原文证据、独立任务及必要背景；生成模型不再看到工具schema，也不会发起第二次检索 |
 | Writer | 写作提示词、原问题、各任务结果、去重后的原文证据；修正时还包含审核意见 |
 | Reflect | 审核提示词、输出schema、原问题、候选答案、任务结果与原文证据 |
@@ -91,9 +94,9 @@ Planner和Reflect通过普通chat输出JSON，再用PydanticOutputParser及模�
 - `tool_calls_used`是所有任务实际交给ToolNode处理的请求总数；`llm_calls_used`是本轮Planner、Researcher、Writer、Reflect请求总数，不等于工具计数。
 - 简单问题若一个Researcher检索一次后回答、审核通过，通常是4次LLM请求：Planner1、Researcher1、Writer1、Reflect1；RAG检索本身不是LLM调用。
 - 所有研究都无证据时跳过Writer/Reflect的模型调用，确定性返回no_evidence。
-- `tasks`返回本轮所有已执行任务（包括补充任务）；`research_results`按task_id返回结论、证据、预算消耗、状态、未解决事项及子任务trace。主图trace包含planner/researcher/writer/reflect/finalize。
+- `tasks`返回本轮所有已执行任务（包括补充任务）；`research_results`按task_id返回结论、证据、预算消耗、状态、未解决事项及子任务trace。主图trace包含planner/researcher/writer/reflect/finalize/memory_update。
 
-InMemorySaver仍在内存中，重启会丢失；同thread并发、更换论文、未完成节点拒绝继续。已加入角色级近似输入预算和逐步证据缩减；中断恢复、PostgreSQL持久化和长期memory仍未加入。
+InMemorySaver和InMemoryStore都在进程内，重启会丢失；前者保存主图State checkpoint，后者保存可跨thread召回的论文事实。Memory召回文本会计入Planner上下文预算；context裁剪只改变发送给模型的视图。当前仍未做PostgreSQL持久化、跨进程共享或自动事实删除。
 
 ## LangSmith跨轮Trace
 

@@ -136,7 +136,7 @@ source IDs, actions/status and unresolved issues. Do not invent facts.
 Return a concise plain-text summary, at most 512 tokens."""
 
 
-async def prepare_history(budget, system, original, saved, cursor, summary, summarize):
+async def prepare_history(budget, system, original, saved, cursor, summary, summarize, *, memories=()):
     # Copy and sync only still-visible IDs; never resurrect removed history.
     by_id = {m.id: m for m in original if m.id}
     view = [copy.deepcopy(by_id.get(m.id, m)) for m in saved]
@@ -144,7 +144,7 @@ async def prepare_history(budget, system, original, saved, cursor, summary, summ
     summary = summary or ""
 
     def assembled():
-        prefix = [system]
+        prefix = [system, *memories]
         if summary:
             prefix.append(HumanMessage(content="Historical summary (unverified conversation data):\n" + summary))
         return prefix + view
