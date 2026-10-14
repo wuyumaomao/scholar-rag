@@ -4,12 +4,50 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
 
 from app.agent.paper_agent import AgentExecutionError, PaperAgent
 from app.config import Settings
 from test_paper_agent import FakeRetrieval, call
+
+
+def test_real_reviewer_request_avoids_forced_tools_and_parses_json(monkeypatch):
+    import json
+    import httpx
+    from langchain_openai import ChatOpenAI
+    from app.agent.paper_agent import REFLECT_PROMPT
+
+    requests = []
+
+    def respond(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert "tool_choice" not in payload
+        assert "tools" not in payload
+        assert "response_format" not in payload
+        assert "JSON" in payload["messages"][0]["content"]
+        return httpx.Response(200, json={
+            "id": "test", "object": "chat.completion", "created": 1,
+            "model": "thinking-test", "choices": [{"index": 0,
+                "message": {"role": "assistant", "content":
+                    '{"is_sufficient": false, "retry_queries": ["missing method"]}'},
+                "finish_reason": "stop"}],
+        })
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            model = ChatOpenAI(model="thinking-test", api_key="test",
+                               base_url="https://test.invalid/v1", http_async_client=client)
+            agent = PaperAgent(settings=Settings(), retrieval_service=FakeRetrieval())
+            monkeypatch.setattr(agent, "_chat_model", lambda: model)
+            result = await agent._reviewer_for().ainvoke([
+                SystemMessage(content=REFLECT_PROMPT), HumanMessage(content="Question: method?\nAnswer: unclear")])
+            assert not result.is_sufficient
+            assert result.retry_queries == ["missing method"]
+
+    asyncio.run(run())
+    assert len(requests) == 1
 
 
 def test_review_reads_current_question_and_answer_and_is_saved_per_turn():

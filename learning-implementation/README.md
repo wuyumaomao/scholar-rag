@@ -17,7 +17,7 @@
 app/
   main.py, config.py       应用入口和环境配置
   routers/                 FastAPI HTTP 接口
-  agent/                   LangGraph 单任务模型/工具循环
+  agent/                   LangGraph 主图编排与单任务研究子图
   documents/               PDF 结构化解析和 parent/child chunk
   retrieval/               Embedding、Dense/BM25、RRF、rerank、HyDE、VLM
   generation/              基于检索证据组装提示词并调用 LLM
@@ -31,11 +31,13 @@ app/
 
 检索算法仍各自放在独立模块中，方便按知识点阅读和单独测试；`scripts/` 放手动运行的导出/评测工具，`tests/` 验证模块行为。
 
-## 单任务 Agent
+## Agent 编排
 
-新增 `POST /api/agent`，使用 `StateGraph`、`MessagesState`、`ToolNode` 与条件边，让模型按需调用论文检索工具。默认最多处理 3 个工具请求，返回答案、状态、证据和执行轨迹。可在后端 `/docs` 输入已上传论文的 `file_id` 与 `query`；模型服务需支持 tool calling。
+`POST /api/agent` 当前使用 `Planner → Researcher → Writer → Reflect` 主图：Planner生成1–3个独立任务，LangGraph `Send` 动态派发；每个Researcher运行自己的模型/工具循环，Writer汇总，Reflect读取答案和原文证据并最多触发一次修正。整轮共享6次工具请求，每任务最多3次，最多3个并行任务。可在后端 `/docs` 输入已上传论文的 `file_id` 与 `query`；模型服务需支持 tool calling。
 
-组件用途、运行方式和逐段讲解见 [agent-loop学习文档.md](agent-loop学习文档.md)。已接入进程内 `InMemorySaver`：首次请求返回 `thread_id`，后续请求携带相同 ID 恢复消息历史；每轮重置工具预算。同一会话固定论文范围。重启后历史丢失，尚未接入 PostgreSQL 历史或执行恢复入口。
+当前编排、状态/上下文边界和运行说明见 [agent编排学习文档.md](agent编排学习文档.md)；旧版单任务loop保留在 `paper_agent.py`，讲解见 [agent-loop学习文档.md](agent-loop学习文档.md)。主图使用进程内 `InMemorySaver` 保存用户/最终助手对话、任务结果和trace；Researcher单任务上下文不跨任务复用，每轮重置预算。重启后历史丢失，旧单Agent的thread不能直接迁移；未接入PostgreSQL、context裁剪或执行恢复。
+
+可选配置 LangSmith 环境变量后，主图与 Researcher 的 LangChain 调用会按 `conversation_id` / `turn_id` 记录跨轮 Trace。LangSmith 只负责观测，不替代 `InMemorySaver`；详见编排学习文档。
 
 ## 计划里程碑
 

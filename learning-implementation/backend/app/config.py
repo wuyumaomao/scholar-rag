@@ -78,6 +78,12 @@ class Settings:
     llm_api_key: str = ""
     llm_temperature: float = 0.7
     llm_max_tokens: int = 4096
+    agent_context_tokens: int = 16384
+    agent_context_margin: int = 1024
+
+    def __post_init__(self):
+        if self.agent_context_margin < 0 or self.agent_context_tokens <= self.llm_max_tokens + self.agent_context_margin:
+            raise ValueError("Agent context budget must exceed output reserve plus margin")
 
     vlm_enabled: bool = False
     vlm_base_url: str = ""
@@ -119,6 +125,8 @@ class Settings:
             llm_api_key=os.getenv("LLM_API_KEY", cls.llm_api_key),
             llm_temperature=_env_float("LLM_TEMPERATURE", cls.llm_temperature, minimum=0),
             llm_max_tokens=_env_int("LLM_MAX_TOKENS", cls.llm_max_tokens),
+            agent_context_tokens=_env_int("AGENT_CONTEXT_TOKENS", cls.agent_context_tokens),
+            agent_context_margin=_env_int("AGENT_CONTEXT_MARGIN", cls.agent_context_margin, minimum=0),
             vlm_enabled=_env_bool("VLM_ENABLED", cls.vlm_enabled),
             vlm_base_url=os.getenv("VLM_BASE_URL", cls.vlm_base_url).strip(),
             vlm_model=os.getenv("VLM_MODEL", cls.vlm_model).strip(),

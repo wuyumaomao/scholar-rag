@@ -25,7 +25,7 @@ def test_agent_api_returns_single_task_result(monkeypatch, tmp_path):
             return {"answer": "Answer", "status": "completed", "tool_calls_used": 1,
                     "sources": [], "trace": []}
 
-    monkeypatch.setattr(agent, "PaperAgent", FakeAgent)
+    monkeypatch.setattr(agent, "PaperWorkflow", FakeAgent)
     response = TestClient(app).post("/api/agent", json={"file_id": "paper", "query": "Question"})
     assert response.status_code == 200
     assert response.json()["status"] == "completed"
@@ -58,7 +58,7 @@ def test_agent_api_model_failure_is_sanitized_503(monkeypatch, tmp_path):
         async def run(self, **kwargs):
             raise AgentExecutionError("private-provider-secret")
 
-    monkeypatch.setattr(agent, "PaperAgent", FailingAgent)
+    monkeypatch.setattr(agent, "PaperWorkflow", FailingAgent)
     response = TestClient(app).post("/api/agent", json={"file_id": "paper", "query": "question"})
     assert response.status_code == 503
     assert "private" not in response.text
@@ -76,7 +76,7 @@ def test_agent_api_passes_thread_and_maps_conflicts(monkeypatch, tmp_path):
             assert kwargs["thread_id"] == "thread-1"
             raise AgentConversationError("会话已绑定另一篇论文，请创建新会话")
 
-    monkeypatch.setattr(agent, "PaperAgent", ConflictAgent)
+    monkeypatch.setattr(agent, "PaperWorkflow", ConflictAgent)
     response = TestClient(app).post("/api/agent", json={
         "file_id": "paper", "query": "question", "thread_id": "thread-1"})
     assert response.status_code == 409

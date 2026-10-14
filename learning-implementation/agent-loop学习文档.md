@@ -1,5 +1,7 @@
 # 单任务 LangGraph Agent loop：第一版逐段理解
 
+> 本文讲解保留的 `PaperAgent` 单任务版本。当前 `/api/agent` 已接入 `PaperWorkflow` 主图，最新运行路径、预算、状态和响应请看 [agent编排学习文档.md](agent编排学习文档.md)。下面的单任务API示例用于理解旧版；Researcher复用loop时不运行子任务审核或恢复旧会话。
+
 本版目标：基于现有 RAG，让模型选择何时检索、如何改写检索问题以及何时回答。程序定义可用工具、论文范围和执行上限，模型决定范围内的下一步。
 
 ## 先运行一次
@@ -238,7 +240,7 @@ agent 生成答案 → reflect → END
 按下面顺序阅读新增代码：
 
 1. `ReflectionResult` 定义模型需要返回的结构：`is_sufficient`（是否充分）和 `retry_queries`（建议补充检索的问题）。
-2. `_chat_model()` 复用原有模型配置；生成模型绑定检索工具，`_reviewer_for()` 则调用 `with_structured_output(ReflectionResult)`，不绑定工具。
+2. `_chat_model()` 复用原有模型配置；生成模型绑定检索工具，`_reviewer_for()` 使用普通模型请求加 `PydanticOutputParser`。提示词要求 JSON，由本地解析器校验 ReflectionResult，不发送 tools、tool_choice 或 response_format，以兼容不支持强制工具选择的 Thinking 模式。
 3. `reflect(state)` 取最新用户问题及最后的候选答案，调用审核模型，并返回 `{"review": review}`。
 4. LangGraph 把 review 合并到 State，checkpointer 保存快照。它不追加到 messages，也不自动进入下一轮的模型上下文。每轮初始化为 None，避免沿用旧审核结果。
 5. `route()` 无工具调用时返回 reflect；注册节点后通过 `reflect → END` 结束。

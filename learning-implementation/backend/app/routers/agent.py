@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from langgraph.checkpoint.memory import InMemorySaver
 
-from app.agent.paper_agent import AgentConversationError, AgentExecutionError, PaperAgent
+from app.agent.paper_agent import AgentConversationError, AgentExecutionError
+from app.agent.paper_workflow import PaperWorkflow
 from app.routers import retrieval as retrieval_api
 
 
@@ -43,7 +44,7 @@ async def run_agent(request: AgentRequest) -> dict:
     pdf_path = retrieval_api.UPLOAD_DIR / f"{request.file_id}.pdf"
     if not await asyncio.to_thread(Path.is_file, pdf_path):
         raise HTTPException(status_code=404, detail="PDF 文件不存在")
-    agent = PaperAgent(settings=retrieval_api.settings,
+    agent = PaperWorkflow(settings=retrieval_api.settings,
                        retrieval_service=retrieval_api.retrieval_service,
                        checkpointer=checkpointer, conversation_locks=conversation_locks)
     try:
