@@ -57,7 +57,7 @@ def test_chat_retrieves_evidence_generates_answer_and_persists_messages(
     monkeypatch.setattr(
         chat,
         "add_message",
-        lambda session_id, role, content: messages.append((session_id, role, content)),
+        lambda session_id, role, content, **kwargs: messages.append((session_id, role, content)),
     )
 
     response = TestClient(app).post(
@@ -69,6 +69,11 @@ def test_chat_retrieves_evidence_generates_answer_and_persists_messages(
     assert response.json() == {
         "answer": "The paper uses a CNN-CRF [S1, p. 1].",
         "session_id": "session-1",
+        "sources": [{
+            "source_id": "S1", "file_id": "file-1", "filename": "",
+            "chunk_id": "element-000001-parent", "page_nums": [1],
+            "section_path": [], "text": hit.chunk.context,
+        }],
     }
     assert retrieved["args"] == (
         "file-1",
@@ -127,7 +132,7 @@ def test_chat_does_not_persist_messages_when_answer_generation_fails(
     monkeypatch.setattr(
         chat,
         "add_message",
-        lambda session_id, role, content: saved_messages.append(
+        lambda session_id, role, content, **kwargs: saved_messages.append(
             (session_id, role, content)
         ),
     )
@@ -188,7 +193,7 @@ def test_stream_chat_emits_tokens_then_done_and_persists_complete_answer(
     monkeypatch.setattr(
         chat,
         "add_message",
-        lambda session_id, role, content: saved_messages.append(
+        lambda session_id, role, content, **kwargs: saved_messages.append(
             (session_id, role, content)
         ),
     )
@@ -201,7 +206,10 @@ def test_stream_chat_emits_tokens_then_done_and_persists_complete_answer(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     frames = response.text.strip().split("\n\n")
-    assert frames == [
+    import json
+    assert frames[0].startswith("event: sources\ndata: ")
+    assert json.loads(frames[0].split("data: ", 1)[1])["sources"][0]["text"] == "Evidence."
+    assert frames[1:] == [
         'event: token\ndata: {"text": "The method "}',
         'event: token\ndata: {"text": "works."}',
         'event: done\ndata: {"session_id": "session-1"}',
@@ -246,7 +254,7 @@ def test_stream_chat_without_hits_streams_deterministic_answer(
     monkeypatch.setattr(
         chat,
         "add_message",
-        lambda session_id, role, content: saved_messages.append(
+        lambda session_id, role, content, **kwargs: saved_messages.append(
             (session_id, role, content)
         ),
     )
@@ -306,7 +314,7 @@ def test_stream_chat_reports_generation_error_without_persisting_partial_answer(
     monkeypatch.setattr(
         chat,
         "add_message",
-        lambda session_id, role, content: saved_messages.append(
+        lambda session_id, role, content, **kwargs: saved_messages.append(
             (session_id, role, content)
         ),
     )

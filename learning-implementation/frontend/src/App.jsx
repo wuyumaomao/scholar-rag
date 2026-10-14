@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import SourceMessage from "./SourceMessage.jsx";
 
 import {
   deleteSession,
@@ -20,9 +20,7 @@ function Message({ message }) {
         {isUser ? (
           <p>{message.content}</p>
         ) : (
-          <div className="markdown-content">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          </div>
+          <SourceMessage message={message} />
         )}
       </div>
     </article>
@@ -106,7 +104,7 @@ export default function App() {
     setMessages((current) => [
       ...current,
       { role: "user", content: question },
-      { id: assistantMessageId, role: "assistant", content: "" },
+      { id: assistantMessageId, role: "assistant", content: "", sources: [] },
     ]);
     setLoading(true);
 
@@ -115,6 +113,11 @@ export default function App() {
         file_id: selectedFileId,
         query: question,
         session_id: sessionId,
+        onSources: (sources) => {
+          setMessages((current) => current.map((message) => (
+            message.id === assistantMessageId ? { ...message, sources } : message
+          )));
+        },
         onToken: (text) => {
           setMessages((current) => current.map((message) => (
             message.id === assistantMessageId

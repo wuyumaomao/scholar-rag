@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 
 from app.config import Settings
 from app.retrieval.retriever import RetrievalHit
+from app.generation.sources import numbered_evidence
 
 
 class AnswerGenerationError(RuntimeError):
@@ -112,9 +113,7 @@ class AnswerGenerator:
         self._validate_request(query)
         evidence = [
             _format_evidence(hit, source_number)
-            for source_number, hit in enumerate(
-                (hit for hit in hits if hit.chunk.context.strip()), start=1
-            )
+            for source_number, hit in numbered_evidence(hits)
         ]
         evidence_text = (
             "\n\n".join(evidence)

@@ -66,6 +66,7 @@ export async function streamChat({
   query,
   session_id = null,
   onToken,
+  onSources,
 }) {
   const response = await fetch(`${API_BASE}/chat/stream`, {
     method: "POST",
@@ -96,7 +97,7 @@ export async function streamChat({
   const dispatch = (frame) => {
     if (!frame.trim()) return;
     const { event, data } = parseSseFrame(frame);
-    if (!["token", "done", "error"].includes(event)) return;
+    if (!["sources", "token", "done", "error"].includes(event)) return;
     if (!data) return;
 
     let payload;
@@ -106,7 +107,10 @@ export async function streamChat({
       throw new Error("流式响应格式无效");
     }
 
-    if (event === "token") {
+    if (event === "sources") {
+      if (!Array.isArray(payload.sources)) throw new Error("流式来源格式无效");
+      onSources?.(payload.sources);
+    } else if (event === "token") {
       if (typeof payload.text === "string") onToken?.(payload.text);
     } else if (event === "done") {
       if (typeof payload.session_id !== "string" || !payload.session_id) {

@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.generation.answer_generator import AnswerGenerationError, AnswerGenerator
+from app.generation.sources import build_sources
 from app.retrieval.retriever import RetrievalHit
 from app.routers import retrieval as retrieval_api
 from app.storage.store import add_message, create_session, get_session, touch_session
@@ -38,7 +39,7 @@ class ChatRequest(BaseModel):
 
 async def _prepare_chat(
     request: ChatRequest,
-) -> tuple[dict[str, object] | None, list[RetrievalHit]]:
+) -> tuple[dict[str, object] | None, list[RetrievalHit], list[dict[str, object]]]:
     """Validate the selected file/session and retrieve evidence before response."""
     file_record = await asyncio.to_thread(retrieval_api.get_file, request.file_id)
     if file_record is None:
@@ -74,13 +75,15 @@ async def _prepare_chat(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
 
-    return existing_session, hits
+    sources = build_sources(hits, request.file_id, str(file_record.get("filename", "")))
+    return existing_session, hits, sources
 
 
 async def _persist_exchange(
     request: ChatRequest,
     existing_session: dict[str, object] | None,
     answer: str,
+    sources: list[dict[str, object]],
 ) -> str:
     """Persist a completed user/assistant exchange and return its session ID."""
     if existing_session is None:
@@ -91,20 +94,20 @@ async def _persist_exchange(
 
     session_id = str(session["session_id"])
     await asyncio.to_thread(add_message, session_id, "user", request.query)
-    await asyncio.to_thread(add_message, session_id, "assistant", answer)
+    await asyncio.to_thread(add_message, session_id, "assistant", answer, sources=sources)
     return session_id
 
 
-def _sse_event(event: str, data: dict[str, str]) -> str:
+def _sse_event(event: str, data: dict[str, object]) -> str:
     """Format one SSE event with JSON data and a UTF-8-safe payload."""
     payload = json.dumps(data, ensure_ascii=False)
     return f"event: {event}\ndata: {payload}\n\n"
 
 
 @router.post("/api/chat")
-async def chat(request: ChatRequest) -> dict[str, str]:
+async def chat(request: ChatRequest) -> dict[str, object]:
     """Retrieve evidence, generate a grounded answer, and persist the exchange."""
-    existing_session, hits = await _prepare_chat(request)
+    existing_session, hits, sources = await _prepare_chat(request)
 
     if hits:
         try:
@@ -122,18 +125,19 @@ async def chat(request: ChatRequest) -> dict[str, str]:
     else:
         answer = NO_EVIDENCE_ANSWER
 
-    session_id = await _persist_exchange(request, existing_session, answer)
-    return {"answer": answer, "session_id": session_id}
+    session_id = await _persist_exchange(request, existing_session, answer, sources)
+    return {"answer": answer, "session_id": session_id, "sources": sources}
 
 
 @router.post("/api/chat/stream")
 async def stream_chat(request: ChatRequest) -> StreamingResponse:
     """Stream grounded answer text as SSE while preserving JSON chat behavior."""
-    existing_session, hits = await _prepare_chat(request)
+    existing_session, hits, sources = await _prepare_chat(request)
 
     async def generate_events() -> AsyncIterator[str]:
         answer_parts: list[str] = []
         try:
+            yield _sse_event("sources", {"sources": sources})
             if hits:
                 async for text in answer_generator.astream(request.query, hits):
                     answer_parts.append(text)
@@ -143,7 +147,7 @@ async def stream_chat(request: ChatRequest) -> StreamingResponse:
                 yield _sse_event("token", {"text": NO_EVIDENCE_ANSWER})
 
             answer = "".join(answer_parts)
-            session_id = await _persist_exchange(request, existing_session, answer)
+            session_id = await _persist_exchange(request, existing_session, answer, sources)
         except AnswerGenerationError as exc:
             # The exception string is already sanitized by AnswerGenerator.
             logger.error("Answer generation failed: %s", exc)

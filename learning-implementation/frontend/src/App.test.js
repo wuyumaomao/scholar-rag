@@ -45,7 +45,7 @@ test("session history loading blocks sending against the previously selected ses
   dom.window.HTMLElement.prototype.scrollIntoView = () => {};
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const vite = await createServer({
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, hmr: false, ws: false },
     appType: "custom",
   });
   const { default: App } = await vite.ssrLoadModule("/src/App.jsx");
@@ -79,12 +79,14 @@ test("session history loading blocks sending against the previously selected ses
   await act(async () => {
     resolveHistory(Response.json([
       { role: "user", content: "Earlier question" },
-      { role: "assistant", content: "Earlier answer" },
+      { role: "assistant", content: "Earlier answer [S1, p. 3]", sources: [{ source_id: "S1", filename: "paper.pdf", page_nums: [3], section_path: [], text: "Saved source text" }] },
     ]));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   assert.equal(textarea.disabled, false);
   assert.equal(container.textContent.includes("Earlier answer"), true);
+  await act(async () => container.querySelector(".citation-button").click());
+  assert.ok(container.querySelector(".source-card").textContent.includes("Saved source text"));
 
   await act(async () => root.unmount());
   await vite.close();

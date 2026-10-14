@@ -100,6 +100,17 @@ button:disabled, select:disabled, textarea:disabled { cursor: not-allowed; }
 .composer > button:disabled { color: #a4a8b4; background: #e7e8ee; }
 .composer-hint { margin: 8px auto 0; width: min(850px, 100%); color: #a1a6b2; text-align: center; font-size: 10px; }
 
+.citation-button { padding: 1px 5px; border: 1px solid #d8d4f2; border-radius: 5px; color: #554bb1; background: #f3f1ff; font-size: inherit; }
+.citation-button:hover, .citation-button[aria-expanded="true"] { background: #e5e0ff; }
+.citation-button:focus-visible { outline: 2px solid #635bce; outline-offset: 2px; }
+.source-card { margin-top: 14px; padding: 12px 14px; border: 1px solid #d8d4f2; border-radius: 10px; background: #faf9ff; }
+.source-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.source-card-heading strong { min-width: 0; overflow-wrap: anywhere; }
+.source-card-heading button { flex-shrink: 0; border: 0; border-radius: 4px; color: #696180; background: transparent; font-size: 20px; }
+.source-card-meta { margin: 5px 0 10px; color: #77718c; font-size: 12px; overflow-wrap: anywhere; }
+.source-card-text { max-height: 280px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.source-card-note { margin: 10px 0 0; color: #77718c; font-size: 11px; }
+
 @media (max-width: 760px) {
   .sidebar { flex-basis: 68px; align-items: center; padding: 16px 8px 12px; }
   .brand-lockup { padding: 0 0 22px; }

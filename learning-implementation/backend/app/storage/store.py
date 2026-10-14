@@ -2,6 +2,7 @@
 
 import time
 from uuid import uuid4
+from psycopg.types.json import Jsonb
 
 from app.storage.database import get_connection
 
@@ -93,26 +94,28 @@ def delete_session(session_id: str) -> bool:
             return cur.rowcount == 1
 
 
-def add_message(session_id: str, role: str, content: str) -> None:
+def add_message(
+    session_id: str, role: str, content: str, *, sources: list[dict[str, object]] | None = None
+) -> None:
     """将一条用户或助手消息写入 messages 表。"""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO messages (session_id, role, content)
-                VALUES (%s, %s, %s)
+                INSERT INTO messages (session_id, role, content, sources)
+                VALUES (%s, %s, %s, %s)
                 """,
-                (session_id, role, content),
+                (session_id, role, content, Jsonb(sources or [])),
             )
 
 
-def list_messages(session_id: str) -> list[dict[str, str]]:
+def list_messages(session_id: str) -> list[dict[str, object]]:
     """按插入顺序返回指定会话的聊天历史。"""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT role, content
+                SELECT role, content, sources
                 FROM messages
                 WHERE session_id = %s
                 ORDER BY message_id
@@ -121,7 +124,7 @@ def list_messages(session_id: str) -> list[dict[str, str]]:
             )
             rows = cur.fetchall()
 
-    return [{"role": row[0], "content": row[1]} for row in rows]
+    return [{"role": row[0], "content": row[1], "sources": row[2]} for row in rows]
 
 
 def _file_from_row(row: tuple[object, ...]) -> dict[str, object]:

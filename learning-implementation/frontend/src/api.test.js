@@ -4,6 +4,18 @@ import { afterEach, test } from "node:test";
 const originalFetch = globalThis.fetch;
 const encoder = new TextEncoder();
 
+test("streamChat delivers split source metadata before answer tokens", async () => {
+  const { streamChat } = await import("./api.js");
+  const sources = [{ source_id: "S1", filename: "论文.pdf", page_nums: [3], text: "原文" }];
+  const bytes = encoder.encode(`event: sources\ndata: ${JSON.stringify({ sources })}\n\nevent: token\ndata: {"text":"Answer [S1]"}\n\nevent: done\ndata: {"session_id":"session-1"}\n\n`);
+  globalThis.fetch = async () => responseFromByteChunks([
+    bytes.slice(0, 45), bytes.slice(45, 80), bytes.slice(80),
+  ]);
+  const events = [];
+  await streamChat({ file_id: "file-1", query: "Question", onSources: (items) => events.push(items), onToken: (text) => events.push(text) });
+  assert.deepEqual(events, [sources, "Answer [S1]"]);
+});
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });

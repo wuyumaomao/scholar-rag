@@ -32,7 +32,7 @@ def test_session_metadata_and_deletion_lifecycle(monkeypatch, tmp_path) -> None:
     def touch_session(session_id: str) -> None:
         records[session_id]["updated_at"] = next(timestamps)
 
-    def add_message(session_id: str, role: str, content: str) -> None:
+    def add_message(session_id: str, role: str, content: str, **kwargs) -> None:
         messages[session_id].append({"role": role, "content": content})
 
     def list_messages(session_id: str) -> list[dict[str, str]]:
