@@ -1,6 +1,6 @@
 # Planner / Researcher / Writer / Reflect 编排
 
-这是学习版的显式工作流，不是Supervisor动态选择所有角色。Planner决定研究任务，Researcher内部自主调用工具，主图的条件边控制审核修正。
+这是学习版的显式工作流，不是Supervisor动态选择所有角色。Planner决定研究任务，Researcher按会话scope调用单论文或整库工具，主图的条件边控制审核修正。
 
 ## 先运行
 
@@ -10,6 +10,15 @@
 {
   "file_id": "e72acf3a-53f6-448d-8ece-6b386aed5dda",
   "query": "分别介绍论文的方法、实验表现和局限，请给出原文引用。"
+}
+```
+
+整库检索不传 `file_id`，使用 `scope=corpus`：
+
+```json
+{
+  "scope": "corpus",
+  "query": "比较论文库中不同方法的实验表现"
 }
 ```
 
@@ -36,22 +45,42 @@ flowchart TD
     M --> E([END])
 ```
 
-Researcher子图现在是 `START → retrieve → generate → END`：程序只执行一次检索（仍返回配置的top-k parent证据），再由一个不绑定工具的模型生成子任务结论。审核只对Writer的最终候选答案执行；Reflect需要新证据时重新派发一个全新的Researcher任务。旧版 `PaperAgent.run()` 的自主 `agent ↔ tools` loop 保留在单任务文档中，主图不再使用它。
+Researcher子图现在是 `START → retrieve → generate → END`：程序只执行一次检索，再由一个不绑定工具的模型生成子任务结论。`paper` scope 使用 `search_paper`，`corpus` scope 使用 `search_corpus`；整库工具逐个查询已上传论文并按分数合并，返回的每条证据都保留 `file_id`。审核只对Writer的最终候选答案执行；Reflect需要新证据时重新派发一个全新的Researcher任务。旧版 `PaperAgent.run()` 的自主 `agent ↔ tools` loop 保留在单任务文档中，主图不再使用它。
+
+## Tool 是怎样加入的
+
+当前旧版自主 Agent loop 绑定四个只读工具：
+
+| Tool | 作用 | 输入 |
+| --- | --- | --- |
+| `search_paper` | 在指定论文中检索 Top-k parent evidence | `query` |
+| `search_corpus` | 在整篇论文库中检索并保留 `file_id` | `query` |
+| `get_source` | 根据引用精确取回一个完整 parent source | `file_id`、`source_id` |
+| `list_papers` | 列出当前可检索的论文目录 | 可选 `query` |
+
+增加一个 Tool 要经过四步：
+
+1. 用 Pydantic 定义输入 schema，例如 `SourceInput` 的 `file_id` 和 `source_id`。schema 会成为模型看到的参数定义和校验规则。
+2. 写一个普通 Python 函数，把 schema 参数转换成已有服务调用，并返回 JSON 内容。`get_source` 额外返回一份 source 列表作为 artifact，便于程序保存证据。
+3. 用 LangChain 的 `@tool(args_schema=...)` 把函数包装成 Tool。包装器提供名称、描述、参数 schema 和异步 `ainvoke()` 接口。
+4. 在 Agent 构建时把同一组工具分别传给 `model.bind_tools(tools)` 和 `ToolNode(tools)`。前者只把工具说明放进模型请求，允许模型生成 tool call；后者读取 tool call、执行真实函数，并把结果封装成 `ToolMessage` 回写 State。下一次 `agent` 节点调用模型时，`messages` 中就包含这条工具结果。
+
+因此，`bind_tools` 不会执行工具，也不会把检索结果直接放进上下文；它只声明“模型可以调用哪些工具”。真正的执行发生在 `ToolNode`。直接调用 `tool.ainvoke()` 得到的是序列化的 content 字符串；经过 `ToolNode` 执行时，`content` 和 `artifact` 才会挂到 `ToolMessage` 上。主图的 Researcher 当前固定只检索一次，使用 `search_paper` 或 `search_corpus`；`get_source` 和 `list_papers` 已接入旧版自主 loop，便于学习多工具选择、精确证据回取和论文目录发现。
 
 ## 状态怎么分
 
 | 数据 | 谁保存 | 生命周期 |
 | --- | --- | --- |
 | 用户问题与最终回答messages | 主图 | 跨轮会话 |
-| question、turn_id、tasks | 主图 | 本轮 |
+| question、turn_id、tasks、scope_type/scope_id | 主图 | 本轮；Checkpoint绑定scope |
 | research_results | 主图，按task_id合并 | 本轮；含研究结论、证据、状态、未解决事项和工具trace |
 | answer、sources、review、revision_count | 主图 | 本轮 |
 | trace | 主图，追加合并 | 本轮 |
 | Researcher messages、tool_calls_used | 各自子图 | 单任务执行；本主图每任务固定一次检索 |
 | memory_candidates | 主图 | 本轮；Reflect候选，审核通过且来源校验通过才写入Store |
-| InMemoryStore中的论文fact | Store | 跨thread、跨HTTP请求；进程重启丢失 |
+| PostgreSQL Store中的论文fact | LangGraph `AsyncPostgresStore` | 跨thread、跨HTTP请求和后端重启；整库召回按paper namespace搜索 |
 
-`messages`继承MessagesState的add_messages；任务结果采用字典合并reducer，并行结果不会相互覆盖。每轮初始化使用 `Overwrite({})` / `Overwrite([])` 清空research_results和trace，防止reducer把上一轮结果重新累积进来。Memory不放进State作为长期数据库：路由模块共享一个 `InMemoryStore`，按 `("paper", file_id)` namespace 保存论文事实；Planner开始前召回与问题相关的最多6条，作为待当前证据验证的提示。
+`messages`继承MessagesState的add_messages；任务结果采用字典合并reducer，并行结果不会相互覆盖。每轮初始化使用 `Overwrite({})` / `Overwrite([])` 清空research_results和trace，防止reducer把上一轮结果重新累积进来。Memory不放进State作为长期数据库：应用启动时创建 LangGraph `AsyncPostgresStore`，按 `("paper", file_id)` namespace 保存论文事实；Planner开始前召回与问题相关的最多6条，作为待当前证据验证的提示。启动时的 `setup()` 会创建或升级 LangGraph Store 表。
 
 每个Send携带task_id、独立question、必要background与一次检索预算。同一个researcher节点运行多次，不用写researcher1/researcher2。每次执行新建PaperAgent并调用run_task；不会调用恢复会话的run，也不把用户thread_id用作子任务历史。
 
@@ -62,8 +91,8 @@ Researcher子图现在是 `START → retrieve → generate → END`：程序只�
 | 调用 | 实际发送内容 |
 | --- | --- |
 | Planner | 专用提示词、输出schema、主图用户/最终助手对话、相关memory fact |
-| Researcher | 一次检索得到的原文证据、独立任务及必要背景；生成模型不再看到工具schema，也不会发起第二次检索 |
-| Writer | 写作提示词、原问题、各任务结果、去重后的原文证据；修正时还包含审核意见 |
+| Researcher | 一次单论文或整库检索得到的原文证据、独立任务及必要背景；生成模型不再看到工具schema，也不会发起第二次检索 |
+| Writer | 写作提示词、原问题、各任务结果、去重后的原文证据；跨论文时每条证据携带file_id |
 | Reflect | 审核提示词、输出schema、原问题、候选答案、任务结果与原文证据 |
 
 State里有的数据不会自动进入模型。主图不把所有Researcher工具消息追加到用户会话；Writer/Reflect也不读取完整执行trace。补充研究作为新的任务，只接收独立补充查询、原候选结论和审核问题，不恢复旧子任务消息。
@@ -96,11 +125,11 @@ Planner和Reflect通过普通chat输出JSON，再用PydanticOutputParser及模�
 - 所有研究都无证据时跳过Writer/Reflect的模型调用，确定性返回no_evidence。
 - `tasks`返回本轮所有已执行任务（包括补充任务）；`research_results`按task_id返回结论、证据、预算消耗、状态、未解决事项及子任务trace。主图trace包含planner/researcher/writer/reflect/finalize/memory_update。
 
-InMemorySaver和InMemoryStore都在进程内，重启会丢失；前者保存主图State checkpoint，后者保存可跨thread召回的论文事实。Memory召回文本会计入Planner上下文预算；context裁剪只改变发送给模型的视图。当前仍未做PostgreSQL持久化、跨进程共享或自动事实删除。
+主图使用 LangGraph `AsyncPostgresSaver` 保存 State checkpoint，论文事实使用 `AsyncPostgresStore` 保存；两者都能跨 HTTP 请求、工作流实例和后端重启恢复。`thread_id` 是 checkpoint 恢复键，namespace 是 Memory 隔离键。Memory召回文本会计入Planner上下文预算；context裁剪只改变发送给模型的视图。当前仍未实现中断节点的恢复入口、Memory删除 API 和多租户鉴权。
 
 ## LangSmith跨轮Trace
 
-LangSmith是观测系统，不替代InMemorySaver。通过环境变量启用后，LangChain/LangGraph会记录主图和Researcher子调用：
+LangSmith是观测系统，不替代PostgreSQL checkpointer。通过环境变量启用后，LangChain/LangGraph会记录主图和Researcher子调用：
 
 ```env
 LANGCHAIN_TRACING_V2=true

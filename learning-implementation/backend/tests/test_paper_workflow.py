@@ -13,6 +13,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from app.agent.paper_agent import AgentConversationError, AgentExecutionError, PaperAgent
 from app.agent.paper_workflow import PaperWorkflow
 from app.config import Settings
+from app.documents.chunker import Chunk
+from app.retrieval.retriever import RetrievalHit
 from test_paper_agent import FakeRetrieval, call
 
 
@@ -42,9 +44,14 @@ def workflow(*, tasks=None, planner=None, model=research_model, writer=None,
         bound_reviewer=RunnableLambda(reviewer))
 
 
-def turn(agent, question="Question", *, thread="conversation", file_id="paper"):
-    return agent.run(file_id=file_id, pdf_path=Path("paper.pdf"), figure_dir=Path("figures"),
-                     query=question, thread_id=thread)
+def turn(agent, question="Question", *, thread="conversation", file_id="paper",
+         scope="paper", corpus_files=None):
+    kwargs = {"file_id": file_id, "pdf_path": Path("paper.pdf"),
+              "figure_dir": Path("figures"), "query": question,
+              "thread_id": thread}
+    if isinstance(agent, PaperWorkflow):
+        kwargs.update(scope=scope, corpus_files=corpus_files)
+    return agent.run(**kwargs)
 
 
 def test_send_researchers_are_parallel_isolated_and_writer_waits_for_all():
@@ -321,3 +328,24 @@ def test_independent_conversations_do_not_mix_questions_results_or_paper_scopes(
     assert a["sources"][0]["file_id"] == "paper-a"
     assert b["sources"][0]["file_id"] == "paper-b"
     assert a["tasks"][0]["task_id"] != b["tasks"][0]["task_id"]
+
+
+def test_corpus_scope_researcher_keeps_source_file_ids_and_binds_thread_to_corpus():
+    class CorpusRetrieval(FakeRetrieval):
+        def retrieve_corpus(self, files, query, **kwargs):
+            self.calls.append(("corpus", query, files, kwargs))
+            return [
+                RetrievalHit(Chunk("a-parent", "Evidence A", {"file_id": "paper-a", "page_nums": [1]}), .9),
+                RetrievalHit(Chunk("b-parent", "Evidence B", {"file_id": "paper-b", "page_nums": [2]}), .8),
+            ]
+
+    service = CorpusRetrieval()
+    agent = workflow(service=service)
+    files = [("paper-a", Path("a.pdf"), Path("figures/a")),
+             ("paper-b", Path("b.pdf"), Path("figures/b"))]
+    result = asyncio.run(turn(agent, "Compare methods", scope="corpus",
+                               file_id=None, corpus_files=files))
+    assert {source["file_id"] for source in result["sources"]} == {"paper-a", "paper-b"}
+    assert service.calls[0][0] == "corpus"
+    with pytest.raises(AgentConversationError, match="另一检索范围"):
+        asyncio.run(turn(agent, "Only paper", scope="paper", file_id="paper-a"))

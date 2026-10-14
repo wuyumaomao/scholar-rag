@@ -4,9 +4,17 @@ from app.main import app
 from app.agent.paper_agent import AgentExecutionError
 from app.routers import agent
 from app.agent.paper_agent import AgentConversationError
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
+
+
+def setup_storage(monkeypatch):
+    monkeypatch.setattr(agent, "checkpointer", InMemorySaver())
+    monkeypatch.setattr(agent, "memory_store", InMemoryStore())
 
 
 def setup_file(monkeypatch, tmp_path):
+    setup_storage(monkeypatch)
     (tmp_path / "paper.pdf").write_bytes(b"pdf")
     monkeypatch.setattr(agent.retrieval_api, "UPLOAD_DIR", tmp_path)
     monkeypatch.setattr(agent.retrieval_api, "get_file", lambda _: {"file_id": "paper"})
@@ -32,6 +40,33 @@ def test_agent_api_returns_single_task_result(monkeypatch, tmp_path):
     assert response.json()["status"] == "completed"
 
 
+def test_agent_api_accepts_corpus_scope(monkeypatch, tmp_path):
+    setup_file(monkeypatch, tmp_path)
+    monkeypatch.setattr(agent, "list_files", lambda: [{"file_id": "paper"}])
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            pass
+
+        async def run(self, **kwargs):
+            assert kwargs["scope"] == "corpus"
+            assert kwargs["file_id"] is None
+            assert len(kwargs["corpus_files"]) == 1
+            return {"answer": "Corpus answer", "status": "completed", "trace": []}
+
+    monkeypatch.setattr(agent, "PaperWorkflow", FakeAgent)
+    response = TestClient(app).post("/api/agent", json={
+        "scope": "corpus", "query": "Compare the papers"})
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Corpus answer"
+
+
+def test_agent_api_rejects_invalid_scope_combinations():
+    client = TestClient(app)
+    assert client.post("/api/agent", json={"scope": "corpus", "file_id": "paper", "query": "q"}).status_code == 422
+    assert client.post("/api/agent", json={"scope": "paper", "query": "q"}).status_code == 422
+
+
 def test_agent_api_rejects_unknown_fields_and_blank_input():
     client = TestClient(app)
     for payload in [{"file_id": "paper", "query": " "},
@@ -40,6 +75,7 @@ def test_agent_api_rejects_unknown_fields_and_blank_input():
 
 
 def test_agent_api_missing_file_is_404(monkeypatch, tmp_path):
+    setup_storage(monkeypatch)
     monkeypatch.setattr(agent.retrieval_api, "get_file", lambda _: None)
     client = TestClient(app)
     payload = {"file_id": "paper", "query": "question"}

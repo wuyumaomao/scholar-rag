@@ -35,9 +35,9 @@ app/
 
 `POST /api/agent` 当前使用 `Planner → Researcher → Writer → Reflect` 主图：Planner生成1–3个独立任务，LangGraph `Send` 动态派发；每个Researcher运行自己的模型/工具循环，Writer汇总，Reflect读取答案和原文证据并最多触发一次修正。整轮共享6次工具请求，每任务最多3次，最多3个并行任务。可在后端 `/docs` 输入已上传论文的 `file_id` 与 `query`；模型服务需支持 tool calling。
 
-当前编排、状态/上下文边界和运行说明见 [agent编排学习文档.md](agent编排学习文档.md)；旧版单任务loop保留在 `paper_agent.py`，讲解见 [agent-loop学习文档.md](agent-loop学习文档.md)。主图使用进程内 `InMemorySaver` 保存用户/最终助手对话、任务结果和trace；Researcher单任务上下文不跨任务复用，每轮重置预算。重启后历史丢失，旧单Agent的thread不能直接迁移；未接入PostgreSQL、context裁剪或执行恢复。
+当前编排、状态/上下文边界和运行说明见 [agent编排学习文档.md](agent编排学习文档.md)；旧版单任务loop保留在 `paper_agent.py`，讲解见 [agent-loop学习文档.md](agent-loop学习文档.md)。主图使用 LangGraph `AsyncPostgresSaver` 保存 State/checkpoint，使用 `AsyncPostgresStore` 保存审核通过的论文事实；`/api/agent` 支持 `scope=paper` 的单论文检索和 `scope=corpus` 的整库检索。后端重启后可按 `thread_id` 恢复已完成会话，旧单Agent的thread不能直接迁移；中断节点暂未提供恢复入口。
 
-可选配置 LangSmith 环境变量后，主图与 Researcher 的 LangChain 调用会按 `conversation_id` / `turn_id` 记录跨轮 Trace。LangSmith 只负责观测，不替代 `InMemorySaver`；详见编排学习文档。
+可选配置 LangSmith 环境变量后，主图与 Researcher 的 LangChain 调用会按 `conversation_id` / `turn_id` 记录跨轮 Trace。LangSmith 只负责观测，不替代 PostgreSQL checkpointer；详见编排学习文档。
 
 ## 计划里程碑
 

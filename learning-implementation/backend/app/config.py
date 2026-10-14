@@ -80,6 +80,7 @@ class Settings:
     llm_max_tokens: int = 4096
     agent_context_tokens: int = 16384
     agent_context_margin: int = 1024
+    agent_database_url: str = "postgresql://postgres:postgres@localhost:55432/learning_rag"
 
     def __post_init__(self):
         if self.agent_context_margin < 0 or self.agent_context_tokens <= self.llm_max_tokens + self.agent_context_margin:
@@ -127,6 +128,7 @@ class Settings:
             llm_max_tokens=_env_int("LLM_MAX_TOKENS", cls.llm_max_tokens),
             agent_context_tokens=_env_int("AGENT_CONTEXT_TOKENS", cls.agent_context_tokens),
             agent_context_margin=_env_int("AGENT_CONTEXT_MARGIN", cls.agent_context_margin, minimum=0),
+            agent_database_url=os.getenv("AGENT_DATABASE_URL", cls.agent_database_url),
             vlm_enabled=_env_bool("VLM_ENABLED", cls.vlm_enabled),
             vlm_base_url=os.getenv("VLM_BASE_URL", cls.vlm_base_url).strip(),
             vlm_model=os.getenv("VLM_MODEL", cls.vlm_model).strip(),

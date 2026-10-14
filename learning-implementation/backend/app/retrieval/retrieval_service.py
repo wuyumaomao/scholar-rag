@@ -1,6 +1,6 @@
 """Build and query an in-memory retrieval index for uploaded PDFs."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import inspect
 from importlib.metadata import PackageNotFoundError, version
@@ -171,6 +171,69 @@ class RetrievalService:
             index.parents,
             describe_image=self._describe_image,
         )
+
+    def retrieve_corpus(
+        self,
+        files: list[tuple[str, Path, Path]],
+        query: str,
+        *,
+        top_k: int | None = None,
+        child_top_k: int | None = None,
+        min_score: float | None = None,
+        use_hyde: bool = False,
+        filters: FilterInput = None,
+    ) -> list[RetrievalHit]:
+        """Search every uploaded file and return one globally ranked result list.
+
+        The first corpus implementation deliberately reuses the proven
+        single-file pipeline. Milvus still provides persistent per-file indexes;
+        the service merges the small top-k lists deterministically here.
+        """
+        if not files:
+            return []
+        resolved_top_k = self._settings.top_k if top_k is None else top_k
+        candidates: list[RetrievalHit] = []
+        for file_id, pdf_path, figure_dir in files:
+            for hit in self.retrieve(
+                file_id, pdf_path, query, figure_dir,
+                top_k=resolved_top_k, child_top_k=child_top_k,
+                min_score=min_score, use_hyde=use_hyde, filters=filters,
+            ):
+                metadata = {**hit.chunk.meta, "file_id": file_id}
+                candidates.append(RetrievalHit(
+                    chunk=replace(hit.chunk, meta=metadata), score=hit.score
+                ))
+        candidates.sort(key=lambda hit: hit.score, reverse=True)
+        seen: set[tuple[str, str]] = set()
+        unique = []
+        for hit in candidates:
+            key = (str(hit.chunk.meta.get("file_id", "")), hit.chunk.chunk_id)
+            # Chunk metadata may not carry file_id; use the globally unique
+            # persisted chunk ID plus its evidence as a safe fallback.
+            key = (key[0] or hit.chunk.chunk_id, key[1])
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(hit)
+            if len(unique) >= resolved_top_k:
+                break
+        return unique
+
+    def get_source(
+        self, file_id: str, pdf_path: Path, figure_dir: Path, source_id: str,
+    ) -> Chunk | None:
+        """Fetch one exact parent source after a citation or tool request."""
+        if not source_id.strip():
+            raise ValueError("source_id 不能为空")
+        index = self._get_index(file_id, pdf_path, figure_dir)
+        for parent in index.parents:
+            if parent.chunk_id == source_id:
+                return parent
+        store = self._active_milvus_store()
+        if store is not None:
+            fetched = store.fetch_parents(file_id, [source_id])
+            return fetched[0] if fetched else None
+        return None
 
     def _describe_image(self, image_path: Path, caption: str) -> str:
         """Return a best-effort VLM description without breaking text retrieval."""

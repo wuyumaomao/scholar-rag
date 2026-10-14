@@ -53,7 +53,7 @@ def test_recall_is_scoped_and_matches_chinese_topics():
     store.put(("paper", "paper"), "one", {"memory_type": "fact", "content": "模型使用深度估计方法。"})
     store.put(("paper", "other"), "two", {"memory_type": "fact", "content": "深度估计其他论文。"})
     agent = workflow(memory_store=store)
-    recalled = agent._recall_memories("深度估计的方法是什么？", "paper")
+    recalled = asyncio.run(agent._recall_memories("深度估计的方法是什么？", "paper"))
     assert len(recalled) == 1
     assert recalled[0]["memory_id"] == "one"
 

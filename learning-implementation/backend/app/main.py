@@ -4,7 +4,11 @@
 """
 
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
+
+from app.agent.persistence import postgres_agent_storage
+from app.routers import agent as agent_api
 
 from app.routers.agent import router as agent_router
 from app.routers.chat import router as chat_router
@@ -12,7 +16,17 @@ from app.routers.files import router as files_router
 from app.routers.retrieval import router as retrieval_router
 from app.routers.sessions import router as sessions_router
 
-app = FastAPI(title="Learning RAG Backend")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with postgres_agent_storage(agent_api.retrieval_api.settings.agent_database_url) as (saver, store):
+        agent_api.checkpointer, agent_api.memory_store = saver, store
+        try:
+            yield
+        finally:
+            agent_api.checkpointer = agent_api.memory_store = None
+
+
+app = FastAPI(title="Learning RAG Backend", lifespan=lifespan)
 app.include_router(agent_router)
 app.include_router(chat_router)
 app.include_router(files_router)

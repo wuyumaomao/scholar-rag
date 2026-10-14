@@ -8,7 +8,8 @@ import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
 
-from app.agent.paper_agent import AgentExecutionError, PaperAgent
+from app.agent.paper_agent import (AgentExecutionError, PaperAgent, make_get_source_tool,
+                                    make_list_papers_tool)
 from app.config import Settings
 from app.documents.chunker import Chunk
 from app.retrieval.retriever import RetrievalHit
@@ -34,6 +35,32 @@ class FakeRetrieval:
             return []
         return [RetrievalHit(Chunk(f"{file_id}-parent", f"Evidence for {query}",
                                   {"page_nums": [3], "section_path": ["Method"]}), .9)]
+
+    def get_source(self, file_id, pdf_path, figure_dir, source_id):
+        if source_id != f"{file_id}-parent":
+            return None
+        return Chunk(source_id, "Complete original evidence",
+                     {"page_nums": [3], "section_path": ["Method"]})
+
+
+def test_exact_source_and_paper_catalogue_tools():
+    service = FakeRetrieval()
+    source_tool = make_get_source_tool(service, [("paper", Path("paper.pdf"), Path("figures"))])
+    source = asyncio.run(source_tool.ainvoke({"file_id": "paper", "source_id": "paper-parent"}))
+    # Direct tool invocation returns the serialized content string.  The
+    # artifact is attached later by ToolNode when the graph executes it.
+    source_payload = json.loads(source)
+    assert source_payload["source"]["evidence"] == "Complete original evidence"
+    missing = asyncio.run(source_tool.ainvoke({"file_id": "unknown", "source_id": "paper-parent"}))
+    assert json.loads(missing)["status"] == "error"
+
+    catalogue = make_list_papers_tool([
+        {"file_id": "paper-a", "filename": "method.pdf", "created_at": 1},
+        {"file_id": "paper-b", "filename": "experiments.pdf", "created_at": 2},
+    ])
+    result = asyncio.run(catalogue.ainvoke({"query": "method"}))
+    assert '"file_id": "paper-a"' in result
+    assert "paper-b" not in result
 
 
 def run(service, fn, *, limit=3):

@@ -56,7 +56,7 @@ ToolMessage：工具结果
 AIMessage：继续工具调用或最终回答
 ```
 
-每次 `run()` 都提交新的 HumanMessage 和零计数。同一个 thread_id 会从共享 InMemorySaver 恢复消息历史，再合并新消息；计数和 status 则用本轮初值覆盖。AgentState 还保存 file_id，保证会话固定论文范围。未读取 PostgreSQL 会话数据。
+每次 `run()` 都提交新的 HumanMessage 和零计数。同一个 thread_id 会从共享 checkpointer 恢复消息历史，再合并新消息；计数和 status 则用本轮初值覆盖。学习版主图现在由 `AsyncPostgresSaver` 保存，旧的单任务示例仍可注入 `InMemorySaver` 做离线测试。AgentState 还保存 file_id，保证会话固定论文范围。它不读取 PostgreSQL 的普通会话消息表。
 
 ## 2. Tool：把现有 RAG 包装成模型可调用的能力
 
